@@ -1,15 +1,18 @@
 /* ============================================
-   Export Module
-   Generates output files for Civil 3D, Dynamo,
-   AutoCAD, and other formats.
+   Export Module v2.0
+   Generates BIM files: IFC (Revit), Dynamo .dyn,
+   Dynamo JSON, DXF, AutoCAD Script, LandXML,
+   CSV, and Summary Report.
    ============================================ */
 
 const ExportModule = (() => {
 
   function init() {
+    document.getElementById('btnExportIFC').addEventListener('click', exportIFC);
+    document.getElementById('btnExportDYN').addEventListener('click', exportDYN);
+    document.getElementById('btnExportJSON').addEventListener('click', exportJSON);
     document.getElementById('btnExportCSV').addEventListener('click', exportCSV);
     document.getElementById('btnExportSCR').addEventListener('click', exportSCR);
-    document.getElementById('btnExportJSON').addEventListener('click', exportJSON);
     document.getElementById('btnExportDXF').addEventListener('click', exportDXF);
     document.getElementById('btnExportXML').addEventListener('click', exportXML);
     document.getElementById('btnExportReport').addEventListener('click', exportReport);
@@ -52,70 +55,401 @@ const ExportModule = (() => {
   }
 
   // ============================================
-  // 1. COGO Points CSV
+  // 1. IFC Export (for Revit)
   // ============================================
-  function exportCSV() {
+  function exportIFC() {
     const layout = getLayoutOrWarn();
     if (!layout) return;
     const info = getProjectInfo();
+    const params = NailsModule.getParams();
 
-    let csv = 'PointNumber,Easting,Northing,Elevation,Description,NailLength,Inclination,BarDiameter,Row,Column\n';
+    const timestamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0];
+    const projectGUID = generateIFCGUID();
+    const siteGUID = generateIFCGUID();
+    const buildingGUID = generateIFCGUID();
+    const storeyGUID = generateIFCGUID();
+    const ownerGUID = generateIFCGUID();
+    const contextGUID = generateIFCGUID();
+    const repContextGUID = generateIFCGUID();
 
-    layout.nails.forEach((nail, idx) => {
-      const easting = (nail.headX + info.baseEasting).toFixed(4);
-      const northing = (nail.headZ + info.baseNorthing).toFixed(4);
-      const elevation = (nail.headY + info.baseElevation).toFixed(4);
-      const desc = `SOIL_NAIL_${nail.id}`;
-      csv += `${idx + 1},${easting},${northing},${elevation},${desc},${nail.length},${nail.inclination},${nail.barDiameter},${nail.row},${nail.col}\n`;
+    let lineNum = 1;
+    const lines = [];
+    const ids = {};
+
+    function addLine(content) {
+      const id = `#${lineNum}`;
+      lines.push(`${id}=${content}`);
+      lineNum++;
+      return id;
+    }
+
+    // HEADER
+    let ifc = '';
+    ifc += 'ISO-10303-21;\n';
+    ifc += 'HEADER;\n';
+    ifc += `FILE_DESCRIPTION(('ViewDefinition [CoordinationView]'),'2;1');\n`;
+    ifc += `FILE_NAME('${sanitizeFilename(info.name)}_SoilNails.ifc','${timestamp}',('${escapeIFC(info.designer)}'),('SoilNail BIM'),'SoilNail BIM v2.0','SoilNail BIM','');\n`;
+    ifc += `FILE_SCHEMA(('IFC2X3'));\n`;
+    ifc += 'ENDSEC;\n\n';
+    ifc += 'DATA;\n';
+
+    // Owner History
+    const personId = addLine(`IFCPERSON($,$,'${escapeIFC(info.designer)}',$,$,$,$,$)`);
+    const orgId = addLine(`IFCORGANIZATION($,'SoilNail BIM',$,$,$)`);
+    const personOrgId = addLine(`IFCPERSONANDORGANIZATION(${personId},${orgId},$)`);
+    const appId = addLine(`IFCAPPLICATION(${orgId},'2.0','SoilNail BIM','SoilNailBIM')`);
+    const ownerHistoryId = addLine(`IFCOWNERHISTORY(${personOrgId},${appId},$,.NOCHANGE.,$,${personOrgId},${appId},${Math.floor(Date.now() / 1000)})`);
+
+    // Units
+    const dimExpId = addLine(`IFCDIMENSIONALEXPONENTS(0,0,0,0,0,0,0)`);
+    const siLengthId = addLine(`IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.)`);
+    const siAreaId = addLine(`IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.)`);
+    const siVolId = addLine(`IFCSIUNIT(*,.VOLUMEUNIT.,$,.CUBIC_METRE.)`);
+    const siAngleId = addLine(`IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.)`);
+    const degConvId = addLine(`IFCMEASUREWITHUNIT(IFCPLANEANGLEMEASURE(0.0174532925199),${siAngleId})`);
+    const degUnitId = addLine(`IFCCONVERSIONBASEDUNIT(${dimExpId},.PLANEANGLEUNIT.,'DEGREE',${degConvId})`);
+    const unitAssignId = addLine(`IFCUNITASSIGNMENT((${siLengthId},${siAreaId},${siVolId},${degUnitId}))`);
+
+    // Geometric context
+    const originId = addLine(`IFCCARTESIANPOINT((0.,0.,0.))`);
+    const dirZId = addLine(`IFCDIRECTION((0.,0.,1.))`);
+    const dirXId = addLine(`IFCDIRECTION((1.,0.,0.))`);
+    const dirYId = addLine(`IFCDIRECTION((0.,1.,0.))`);
+    const axis2d3dId = addLine(`IFCAXIS2PLACEMENT3D(${originId},${dirZId},${dirXId})`);
+    const contextId = addLine(`IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,${axis2d3dId},$)`);
+    const bodyContextId = addLine(`IFCGEOMETRICREPRESENTATIONSUBCONTEXT('Body','Model',*,*,*,*,${contextId},$,.MODEL_VIEW.,$)`);
+
+    // Project
+    const projectId = addLine(`IFCPROJECT('${projectGUID}',${ownerHistoryId},'${escapeIFC(info.name)}','${escapeIFC(info.description)}',$,$,$,(${contextId}),${unitAssignId})`);
+
+    // Site
+    const sitePlacementId = addLine(`IFCLOCALPLACEMENT($,${axis2d3dId})`);
+    const siteId = addLine(`IFCSITE('${siteGUID}',${ownerHistoryId},'Site',$,$,${sitePlacementId},$,$,.ELEMENT.,$,$,$,$,$)`);
+
+    // Building
+    const buildingPlacementId = addLine(`IFCLOCALPLACEMENT(${sitePlacementId},${axis2d3dId})`);
+    const buildingId = addLine(`IFCBUILDING('${buildingGUID}',${ownerHistoryId},'Soil Nail Wall',$,$,${buildingPlacementId},$,$,.ELEMENT.,$,$,$)`);
+
+    // Storey
+    const storeyPlacementId = addLine(`IFCLOCALPLACEMENT(${buildingPlacementId},${axis2d3dId})`);
+    const storeyId = addLine(`IFCBUILDINGSTOREY('${storeyGUID}',${ownerHistoryId},'Ground Level',$,$,${storeyPlacementId},$,$,.ELEMENT.,0.)`);
+
+    // Spatial structure
+    const relSiteId = addLine(`IFCRELAGGREGATES('${generateIFCGUID()}',${ownerHistoryId},$,$,${projectId},(${siteId}))`);
+    const relBuildingId = addLine(`IFCRELAGGREGATES('${generateIFCGUID()}',${ownerHistoryId},$,$,${siteId},(${buildingId}))`);
+    const relStoreyId = addLine(`IFCRELAGGREGATES('${generateIFCGUID()}',${ownerHistoryId},$,$,${buildingId},(${storeyId}))`);
+
+    // Circle profile for nails
+    const barRadiusM = params.barDiameter / 2000;
+    const circProfileId = addLine(`IFCCIRCLEPROFILEDEF(.AREA.,$,$,${barRadiusM})`);
+
+    // Material
+    const materialId = addLine(`IFCMATERIAL('Steel Grade ${params.steelGrade}')`);
+
+    // Create each nail as an IfcMember
+    const nailIds = [];
+    layout.nails.forEach((nail) => {
+      const hx = (nail.headX + info.baseEasting);
+      const hy = (nail.headZ + info.baseNorthing);
+      const hz = (nail.headY + info.baseElevation);
+
+      const tx = (nail.tipX + info.baseEasting);
+      const ty = (nail.tipZ + info.baseNorthing);
+      const tz = (nail.tipY + info.baseElevation);
+
+      // Direction vector
+      const dx = tx - hx;
+      const dy = ty - hy;
+      const dz = tz - hz;
+      const length = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const ndx = dx / length;
+      const ndy = dy / length;
+      const ndz = dz / length;
+
+      // Nail position
+      const nailPtId = addLine(`IFCCARTESIANPOINT((${hx.toFixed(6)},${hy.toFixed(6)},${hz.toFixed(6)}))`);
+      const nailDirId = addLine(`IFCDIRECTION((${ndx.toFixed(6)},${ndy.toFixed(6)},${ndz.toFixed(6)}))`);
+
+      // Reference direction (perpendicular)
+      let refX, refY, refZ;
+      if (Math.abs(ndx) < 0.9) {
+        refX = 0; refY = -ndz; refZ = ndy;
+      } else {
+        refX = -ndz; refY = 0; refZ = ndx;
+      }
+      const refLen = Math.sqrt(refX * refX + refY * refY + refZ * refZ) || 1;
+      const refDirId = addLine(`IFCDIRECTION((${(refX / refLen).toFixed(6)},${(refY / refLen).toFixed(6)},${(refZ / refLen).toFixed(6)}))`);
+
+      const nailAxisId = addLine(`IFCAXIS2PLACEMENT3D(${nailPtId},${nailDirId},${refDirId})`);
+      const nailPlacementId = addLine(`IFCLOCALPLACEMENT(${storeyPlacementId},${nailAxisId})`);
+
+      // Extruded solid
+      const profilePlacementId = addLine(`IFCAXIS2PLACEMENT2D(${addLine(`IFCCARTESIANPOINT((0.,0.))`)},${addLine(`IFCDIRECTION((1.,0.))`)})`);
+      const circProfileLocalId = addLine(`IFCCIRCLEPROFILEDEF(.AREA.,$,${profilePlacementId},${barRadiusM})`);
+      const extrudeDirId = addLine(`IFCDIRECTION((0.,0.,1.))`);
+      const solidId = addLine(`IFCEXTRUDEDAREASOLID(${circProfileLocalId},${axis2d3dId},${extrudeDirId},${length.toFixed(6)})`);
+
+      // Shape representation
+      const shapeRepId = addLine(`IFCSHAPEREPRESENTATION(${bodyContextId},'Body','SweptSolid',(${solidId}))`);
+      const prodDefId = addLine(`IFCPRODUCTDEFINITIONSHAPE($,$,(${shapeRepId}))`);
+
+      // IfcMember
+      const nailGUID = generateIFCGUID();
+      const nailId = addLine(`IFCMEMBER('${nailGUID}',${ownerHistoryId},'${nail.id}','Soil Nail Row${nail.row} Col${nail.col}',$,${nailPlacementId},${prodDefId},$)`);
+      nailIds.push(nailId);
+
+      // Property set
+      const propLengthId = addLine(`IFCPROPERTYSINGLEVALUE('NailLength',$,IFCLENGTHMEASURE(${nail.length}),$)`);
+      const propIncId = addLine(`IFCPROPERTYSINGLEVALUE('Inclination',$,IFCPLANEANGLEMEASURE(${nail.inclination * 0.0174532925199}),$)`);
+      const propBarDiaId = addLine(`IFCPROPERTYSINGLEVALUE('BarDiameter',$,IFCLENGTHMEASURE(${nail.barDiameter / 1000}),$)`);
+      const propDrillDiaId = addLine(`IFCPROPERTYSINGLEVALUE('DrillHoleDiameter',$,IFCLENGTHMEASURE(${nail.drillDiameter / 1000}),$)`);
+      const propRowId = addLine(`IFCPROPERTYSINGLEVALUE('Row',$,IFCINTEGER(${nail.row}),$)`);
+      const propColId = addLine(`IFCPROPERTYSINGLEVALUE('Column',$,IFCINTEGER(${nail.col}),$)`);
+      const propElevId = addLine(`IFCPROPERTYSINGLEVALUE('Elevation',$,IFCLENGTHMEASURE(${nail.elevation}),$)`);
+
+      const psetId = addLine(`IFCPROPERTYSET('${generateIFCGUID()}',${ownerHistoryId},'SoilNail_Properties',$,(${propLengthId},${propIncId},${propBarDiaId},${propDrillDiaId},${propRowId},${propColId},${propElevId}))`);
+      addLine(`IFCRELDEFINESBYPROPERTIES('${generateIFCGUID()}',${ownerHistoryId},$,$,(${nailId}),${psetId})`);
     });
 
-    const filename = `${sanitizeFilename(info.name)}_COGO_Points.csv`;
-    downloadFile(csv, filename, 'text/csv');
-    App.showToast(`Downloaded ${filename}`, 'success');
+    // Contain nails in storey
+    if (nailIds.length > 0) {
+      addLine(`IFCRELCONTAINEDINSPATIALSTRUCTURE('${generateIFCGUID()}',${ownerHistoryId},$,$,(${nailIds.join(',')}),${storeyId})`);
+    }
+
+    // Material association
+    if (nailIds.length > 0) {
+      addLine(`IFCRELASSOCIATESMATERIAL('${generateIFCGUID()}',${ownerHistoryId},$,$,(${nailIds.join(',')}),${materialId})`);
+    }
+
+    ifc += lines.join(';\n') + ';\n';
+    ifc += 'ENDSEC;\n';
+    ifc += 'END-ISO-10303-21;\n';
+
+    const filename = `${sanitizeFilename(info.name)}_SoilNails.ifc`;
+    downloadFile(ifc, filename, 'application/x-step');
+    App.showToast(`Downloaded ${filename} (${layout.nails.length} nails)`, 'success');
   }
 
   // ============================================
-  // 2. AutoCAD Script (.scr)
+  // 2. Dynamo Script (.dyn)
   // ============================================
-  function exportSCR() {
+  function exportDYN() {
     const layout = getLayoutOrWarn();
     if (!layout) return;
     const info = getProjectInfo();
+    const params = NailsModule.getParams();
 
-    let scr = '';
-    // Setup
-    scr += '-LAYER M SOIL_NAILS C 5 SOIL_NAILS \n';
-    scr += '-LAYER M NAIL_HEADS C 1 NAIL_HEADS \n';
-    scr += '-LAYER M DRILL_HOLES C 8 DRILL_HOLES \n';
-    scr += '\n';
+    // Build head and tip coordinate arrays
+    const headPtsX = [], headPtsY = [], headPtsZ = [];
+    const tipPtsX = [], tipPtsY = [], tipPtsZ = [];
 
-    // Draw each nail as a 3D line
     layout.nails.forEach(nail => {
-      const hx = (nail.headX + info.baseEasting).toFixed(4);
-      const hy = (nail.headZ + info.baseNorthing).toFixed(4);
-      const hz = (nail.headY + info.baseElevation).toFixed(4);
-      const tx = (nail.tipX + info.baseEasting).toFixed(4);
-      const ty = (nail.tipZ + info.baseNorthing).toFixed(4);
-      const tz = (nail.tipY + info.baseElevation).toFixed(4);
-
-      // Nail line
-      scr += `-LAYER S SOIL_NAILS \n`;
-      scr += `LINE ${hx},${hy},${hz} ${tx},${ty},${tz} \n`;
-
-      // Head plate as point
-      scr += `-LAYER S NAIL_HEADS \n`;
-      scr += `POINT ${hx},${hy},${hz}\n`;
+      headPtsX.push(+(nail.headX + info.baseEasting).toFixed(4));
+      headPtsY.push(+(nail.headZ + info.baseNorthing).toFixed(4));
+      headPtsZ.push(+(nail.headY + info.baseElevation).toFixed(4));
+      tipPtsX.push(+(nail.tipX + info.baseEasting).toFixed(4));
+      tipPtsY.push(+(nail.tipZ + info.baseNorthing).toFixed(4));
+      tipPtsZ.push(+(nail.tipY + info.baseElevation).toFixed(4));
     });
 
-    scr += 'ZOOM E\n';
+    // Dynamo workspace JSON
+    const workspace = {
+      Uuid: generateUUID(),
+      IsCustomNode: false,
+      Description: `Soil Nail Layout - ${info.name}`,
+      Name: `SoilNails_${sanitizeFilename(info.name)}`,
+      ElementResolver: { ResolutionMap: {} },
+      Inputs: [],
+      Outputs: [],
+      Nodes: [],
+      Connectors: [],
+      Dependencies: [],
+      NodeLibraryDependencies: [],
+      Thumbnail: "",
+      GraphDocumentationURL: null,
+      ExtensionWorkspaceData: [],
+      Author: info.designer || "SoilNail BIM",
+      Linting: { activeLinter: "None", activeLinterId: "7b75fb68-9cb4-49b0-80d5-24e2cfbe0bbe", warningCount: 0, errorCount: 0 },
+      Bindings: [],
+      View: {
+        Dynamo: {
+          ScaleFactor: 1,
+          HasRunWithoutCrash: false,
+          IsVisibleInDynamoLibrary: true,
+          Version: "2.18.1.5229",
+          RunType: "Manual",
+          RunPeriod: "1000"
+        },
+        Camera: { EyeX: 0, EyeY: 50, EyeZ: 50, LookX: 0, LookY: -1, LookZ: -1, UpX: 0, UpY: 1, UpZ: 0 },
+        ConnectorPins: [],
+        NodeViews: [],
+        Annotations: [
+          {
+            Id: generateUUID(),
+            Title: "Soil Nail BIM Generator Output",
+            DescriptionText: `Generated by SoilNail BIM v2.0\nProject: ${info.name}\n${layout.nails.length} nails in ${layout.rows.length} rows`,
+            IsExpanded: true,
+            WidthAdjustment: 0,
+            HeightAdjustment: 0,
+            Nodes: [],
+            HasNestedGroups: false,
+            Left: -50,
+            Top: -100,
+            Width: 900,
+            Height: 150,
+            FontSize: 24,
+            GroupStyleId: "00000000-0000-0000-0000-000000000000",
+            InitialTop: 0,
+            InitialHeight: 0,
+            TextblockHeight: 0,
+            Background: "#FFD4B896"
+          }
+        ]
+      }
+    };
 
-    const filename = `${sanitizeFilename(info.name)}_AutoCAD_Script.scr`;
-    downloadFile(scr, filename, 'text/plain');
-    App.showToast(`Downloaded ${filename}`, 'success');
+    let nodeX = 0;
+    const nodeY = 0;
+    const nodeSpacingX = 300;
+    const nodeSpacingY = 100;
+    let nodeViews = [];
+
+    // Helper to create a Code Block node
+    function addCodeBlockNode(id, code, x, y, name) {
+      workspace.Nodes.push({
+        ConcreteType: "Dynamo.Graph.Nodes.CodeBlockNodeModel, DynamoCore",
+        Id: id,
+        NodeType: "CodeBlockNode",
+        Inputs: [],
+        Outputs: [{ Id: generateUUID(), Name: "", Description: "Value of expression", UsingDefaultValue: false }],
+        Replication: "Disabled",
+        Description: name || "Code Block",
+        Code: code
+      });
+      nodeViews.push({ ShowGeometry: true, Name: name || "Code Block", Id: id, IsSetAsInput: false, IsSetAsOutput: false, Excluded: false, X: x, Y: y });
+    }
+
+    // Helper to create a built-in function node
+    function addFunctionNode(id, funcName, concreteType, x, y, inputs, outputs) {
+      workspace.Nodes.push({
+        ConcreteType: concreteType,
+        Id: id,
+        NodeType: "ExtensionNode",
+        Inputs: inputs,
+        Outputs: outputs,
+        Replication: "Disabled",
+        Description: funcName
+      });
+      nodeViews.push({ ShowGeometry: true, Name: funcName, Id: id, IsSetAsInput: false, IsSetAsOutput: false, Excluded: false, X: x, Y: y });
+    }
+
+    // Node 1: Head points X array
+    const headXId = generateUUID();
+    addCodeBlockNode(headXId, JSON.stringify(headPtsX) + ';', nodeX, nodeY, 'Head Points X');
+
+    // Node 2: Head points Y array
+    const headYId = generateUUID();
+    addCodeBlockNode(headYId, JSON.stringify(headPtsY) + ';', nodeX, nodeY + nodeSpacingY, 'Head Points Y');
+
+    // Node 3: Head points Z array
+    const headZId = generateUUID();
+    addCodeBlockNode(headZId, JSON.stringify(headPtsZ) + ';', nodeX, nodeY + nodeSpacingY * 2, 'Head Points Z');
+
+    // Node 4: Tip points X array
+    const tipXId = generateUUID();
+    addCodeBlockNode(tipXId, JSON.stringify(tipPtsX) + ';', nodeX, nodeY + nodeSpacingY * 4, 'Tip Points X');
+
+    // Node 5: Tip points Y array
+    const tipYId = generateUUID();
+    addCodeBlockNode(tipYId, JSON.stringify(tipPtsY) + ';', nodeX, nodeY + nodeSpacingY * 5, 'Tip Points Y');
+
+    // Node 6: Tip points Z array
+    const tipZId = generateUUID();
+    addCodeBlockNode(tipZId, JSON.stringify(tipPtsZ) + ';', nodeX, nodeY + nodeSpacingY * 6, 'Tip Points Z');
+
+    nodeX += nodeSpacingX;
+
+    // Node 7: Create head points using Point.ByCoordinates
+    const headPointsId = generateUUID();
+    addFunctionNode(headPointsId, 'Point.ByCoordinates',
+      'Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore',
+      nodeX, nodeY + nodeSpacingY,
+      [
+        { Id: generateUUID(), Name: "x", Description: "X coordinate", UsingDefaultValue: false },
+        { Id: generateUUID(), Name: "y", Description: "Y coordinate", UsingDefaultValue: false },
+        { Id: generateUUID(), Name: "z", Description: "Z coordinate", UsingDefaultValue: false }
+      ],
+      [{ Id: generateUUID(), Name: "Point", Description: "Point created", UsingDefaultValue: false }]
+    );
+    workspace.Nodes[workspace.Nodes.length - 1].FunctionSignature = "Autodesk.DesignScript.Geometry.Point.ByCoordinates@double,double,double";
+
+    // Node 8: Create tip points
+    const tipPointsId = generateUUID();
+    addFunctionNode(tipPointsId, 'Point.ByCoordinates',
+      'Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore',
+      nodeX, nodeY + nodeSpacingY * 5,
+      [
+        { Id: generateUUID(), Name: "x", Description: "X coordinate", UsingDefaultValue: false },
+        { Id: generateUUID(), Name: "y", Description: "Y coordinate", UsingDefaultValue: false },
+        { Id: generateUUID(), Name: "z", Description: "Z coordinate", UsingDefaultValue: false }
+      ],
+      [{ Id: generateUUID(), Name: "Point", Description: "Point created", UsingDefaultValue: false }]
+    );
+    workspace.Nodes[workspace.Nodes.length - 1].FunctionSignature = "Autodesk.DesignScript.Geometry.Point.ByCoordinates@double,double,double";
+
+    nodeX += nodeSpacingX;
+
+    // Node 9: Create lines (Line.ByStartPointEndPoint)
+    const lineNodeId = generateUUID();
+    addFunctionNode(lineNodeId, 'Line.ByStartPointEndPoint',
+      'Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore',
+      nodeX, nodeY + nodeSpacingY * 3,
+      [
+        { Id: generateUUID(), Name: "startPoint", Description: "Start point", UsingDefaultValue: false },
+        { Id: generateUUID(), Name: "endPoint", Description: "End point", UsingDefaultValue: false }
+      ],
+      [{ Id: generateUUID(), Name: "Line", Description: "Line created", UsingDefaultValue: false }]
+    );
+    workspace.Nodes[workspace.Nodes.length - 1].FunctionSignature = "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point";
+
+    // Add connectors
+    function connect(startNodeId, startIdx, endNodeId, endIdx) {
+      const startNode = workspace.Nodes.find(n => n.Id === startNodeId);
+      const endNode = workspace.Nodes.find(n => n.Id === endNodeId);
+      if (startNode && endNode) {
+        workspace.Connectors.push({
+          Start: startNode.Outputs[startIdx].Id,
+          End: endNode.Inputs[endIdx].Id,
+          Id: generateUUID()
+        });
+      }
+    }
+
+    // Head X,Y,Z -> Head Point.ByCoordinates
+    connect(headXId, 0, headPointsId, 0);
+    connect(headYId, 0, headPointsId, 1);
+    connect(headZId, 0, headPointsId, 2);
+
+    // Tip X,Y,Z -> Tip Point.ByCoordinates
+    connect(tipXId, 0, tipPointsId, 0);
+    connect(tipYId, 0, tipPointsId, 1);
+    connect(tipZId, 0, tipPointsId, 2);
+
+    // Head Points + Tip Points -> Line.ByStartPointEndPoint
+    connect(headPointsId, 0, lineNodeId, 0);
+    connect(tipPointsId, 0, lineNodeId, 1);
+
+    // Assign node views
+    workspace.View.NodeViews = nodeViews;
+
+    const json = JSON.stringify(workspace, null, 2);
+    const filename = `${sanitizeFilename(info.name)}_SoilNails.dyn`;
+    downloadFile(json, filename, 'application/json');
+    App.showToast(`Downloaded ${filename} - Open in Dynamo for Civil 3D/Revit`, 'success');
   }
 
   // ============================================
-  // 3. Dynamo JSON
+  // 3. Dynamo JSON Data
   // ============================================
   function exportJSON() {
     const layout = getLayoutOrWarn();
@@ -126,7 +460,7 @@ const ExportModule = (() => {
 
     const dynamoData = {
       metadata: {
-        generator: 'SoilNail BIM v1.0',
+        generator: 'SoilNail BIM v2.0',
         project: info.name,
         projectNumber: info.number,
         designer: info.designer,
@@ -198,7 +532,65 @@ const ExportModule = (() => {
   }
 
   // ============================================
-  // 4. DXF Drawing
+  // 4. COGO Points CSV
+  // ============================================
+  function exportCSV() {
+    const layout = getLayoutOrWarn();
+    if (!layout) return;
+    const info = getProjectInfo();
+
+    let csv = 'PointNumber,Easting,Northing,Elevation,Description,NailLength,Inclination,BarDiameter,Row,Column\n';
+
+    layout.nails.forEach((nail, idx) => {
+      const easting = (nail.headX + info.baseEasting).toFixed(4);
+      const northing = (nail.headZ + info.baseNorthing).toFixed(4);
+      const elevation = (nail.headY + info.baseElevation).toFixed(4);
+      const desc = `SOIL_NAIL_${nail.id}`;
+      csv += `${idx + 1},${easting},${northing},${elevation},${desc},${nail.length},${nail.inclination},${nail.barDiameter},${nail.row},${nail.col}\n`;
+    });
+
+    const filename = `${sanitizeFilename(info.name)}_COGO_Points.csv`;
+    downloadFile(csv, filename, 'text/csv');
+    App.showToast(`Downloaded ${filename}`, 'success');
+  }
+
+  // ============================================
+  // 5. AutoCAD Script (.scr)
+  // ============================================
+  function exportSCR() {
+    const layout = getLayoutOrWarn();
+    if (!layout) return;
+    const info = getProjectInfo();
+
+    let scr = '';
+    scr += '-LAYER M SOIL_NAILS C 5 SOIL_NAILS \n';
+    scr += '-LAYER M NAIL_HEADS C 1 NAIL_HEADS \n';
+    scr += '-LAYER M DRILL_HOLES C 8 DRILL_HOLES \n';
+    scr += '\n';
+
+    layout.nails.forEach(nail => {
+      const hx = (nail.headX + info.baseEasting).toFixed(4);
+      const hy = (nail.headZ + info.baseNorthing).toFixed(4);
+      const hz = (nail.headY + info.baseElevation).toFixed(4);
+      const tx = (nail.tipX + info.baseEasting).toFixed(4);
+      const ty = (nail.tipZ + info.baseNorthing).toFixed(4);
+      const tz = (nail.tipY + info.baseElevation).toFixed(4);
+
+      scr += `-LAYER S SOIL_NAILS \n`;
+      scr += `LINE ${hx},${hy},${hz} ${tx},${ty},${tz} \n`;
+      scr += `-LAYER S NAIL_HEADS \n`;
+      scr += `POINT ${hx},${hy},${hz}\n`;
+    });
+
+    scr += 'ZOOM E\n';
+
+    const filename = `${sanitizeFilename(info.name)}_AutoCAD_Script.scr`;
+    downloadFile(scr, filename, 'text/plain');
+    App.showToast(`Downloaded ${filename}`, 'success');
+  }
+
+  // ============================================
+  // 6. DXF Drawing
   // ============================================
   function exportDXF() {
     const layout = getLayoutOrWarn();
@@ -206,32 +598,21 @@ const ExportModule = (() => {
     const info = getProjectInfo();
 
     let dxf = '';
-
-    // DXF Header
     dxf += '0\nSECTION\n2\nHEADER\n';
     dxf += '9\n$ACADVER\n1\nAC1015\n';
     dxf += '0\nENDSEC\n';
 
-    // Tables section with layers
     dxf += '0\nSECTION\n2\nTABLES\n';
     dxf += '0\nTABLE\n2\nLAYER\n';
-
-    // Soil nails layer (blue)
     dxf += '0\nLAYER\n2\nSOIL_NAILS\n70\n0\n62\n5\n6\nCONTINUOUS\n';
-    // Nail heads layer (red)
     dxf += '0\nLAYER\n2\nNAIL_HEADS\n70\n0\n62\n1\n6\nCONTINUOUS\n';
-    // Drill holes layer (gray)
     dxf += '0\nLAYER\n2\nDRILL_HOLES\n70\n0\n62\n8\n6\nCONTINUOUS\n';
-    // Terrain layer (brown/yellow)
     dxf += '0\nLAYER\n2\nTERRAIN\n70\n0\n62\n40\n6\nCONTINUOUS\n';
-
     dxf += '0\nENDTAB\n';
     dxf += '0\nENDSEC\n';
 
-    // Entities section
     dxf += '0\nSECTION\n2\nENTITIES\n';
 
-    // Terrain polyline (2D cross-section in XZ plane)
     const terrain = TerrainModule.getPoints();
     if (terrain.length >= 2) {
       terrain.forEach((pt, i) => {
@@ -247,7 +628,6 @@ const ExportModule = (() => {
       });
     }
 
-    // Nail lines (3D)
     layout.nails.forEach(nail => {
       const hx = (nail.headX + info.baseEasting).toFixed(4);
       const hy = (nail.headZ + info.baseNorthing).toFixed(4);
@@ -256,12 +636,10 @@ const ExportModule = (() => {
       const ty = (nail.tipZ + info.baseNorthing).toFixed(4);
       const tz = (nail.tipY + info.baseElevation).toFixed(4);
 
-      // Nail line
       dxf += `0\nLINE\n8\nSOIL_NAILS\n`;
       dxf += `10\n${hx}\n20\n${hy}\n30\n${hz}\n`;
       dxf += `11\n${tx}\n21\n${ty}\n31\n${tz}\n`;
 
-      // Head point
       dxf += `0\nPOINT\n8\nNAIL_HEADS\n`;
       dxf += `10\n${hx}\n20\n${hy}\n30\n${hz}\n`;
     });
@@ -275,7 +653,7 @@ const ExportModule = (() => {
   }
 
   // ============================================
-  // 5. LandXML
+  // 7. LandXML
   // ============================================
   function exportXML() {
     const layout = getLayoutOrWarn();
@@ -285,11 +663,10 @@ const ExportModule = (() => {
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
     xml += '<LandXML xmlns="http://www.landxml.org/schema/LandXML-1.2" version="1.2">\n';
     xml += `  <Project name="${escapeXML(info.name)}" desc="${escapeXML(info.description)}">\n`;
-    xml += `    <Feature name="SoilNailBIM" code="Generator">SoilNail BIM v1.0</Feature>\n`;
+    xml += `    <Feature name="SoilNailBIM" code="Generator">SoilNail BIM v2.0</Feature>\n`;
     xml += `  </Project>\n`;
     xml += `  <Units>\n    <Metric linearUnit="meter" areaUnit="squareMeter" volumeUnit="cubicMeter" angularUnit="decimal degrees"/>\n  </Units>\n`;
 
-    // CgPoints for nail heads
     xml += '  <CgPoints name="SoilNailHeads">\n';
     layout.nails.forEach((nail, idx) => {
       const n = (nail.headZ + info.baseNorthing).toFixed(4);
@@ -299,16 +676,14 @@ const ExportModule = (() => {
     });
     xml += '  </CgPoints>\n';
 
-    // Terrain surface
-    xml += '  <Surfaces>\n    <Surface name="TerrainProfile">\n      <Definition surfType="TIN">\n';
     const terrain = TerrainModule.getPoints();
+    xml += '  <Surfaces>\n    <Surface name="TerrainProfile">\n      <Definition surfType="TIN">\n';
     xml += '        <Pnts>\n';
     terrain.forEach((pt, i) => {
       xml += `          <P id="${i + 1}">${(pt.y + info.baseElevation).toFixed(4)} ${(pt.x + info.baseEasting).toFixed(4)} 0.0000</P>\n`;
     });
     xml += '        </Pnts>\n        <Faces></Faces>\n';
     xml += '      </Definition>\n    </Surface>\n  </Surfaces>\n';
-
     xml += '</LandXML>\n';
 
     const filename = `${sanitizeFilename(info.name)}_LandXML.xml`;
@@ -317,7 +692,7 @@ const ExportModule = (() => {
   }
 
   // ============================================
-  // 6. Summary Report (HTML)
+  // 8. Summary Report (HTML)
   // ============================================
   function exportReport() {
     const layout = getLayoutOrWarn();
@@ -325,8 +700,6 @@ const ExportModule = (() => {
     const info = getProjectInfo();
     const params = NailsModule.getParams();
     const qty = NailsModule.calculateQuantities(layout);
-
-    // Capture the preview canvas as image
     const canvasImg = document.getElementById('previewCanvas').toDataURL('image/png');
 
     let html = `<!DOCTYPE html>
@@ -335,7 +708,7 @@ const ExportModule = (() => {
 <meta charset="UTF-8">
 <title>Soil Nail Report - ${escapeHTML(info.name)}</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; color: #1e293b; max-width: 900px; margin: 0 auto; padding: 2rem; }
+  body { font-family: 'Segoe UI', -apple-system, Arial, sans-serif; color: #1e293b; max-width: 900px; margin: 0 auto; padding: 2rem; }
   h1 { font-size: 1.8rem; border-bottom: 3px solid #3b82f6; padding-bottom: 0.5rem; }
   h2 { font-size: 1.2rem; color: #3b82f6; margin-top: 2rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.3rem; }
   table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
@@ -396,7 +769,7 @@ ${info.description ? `<p>${escapeHTML(info.description)}</p>` : ''}
 </table>
 
 <div class="footer">
-  Generated by SoilNail BIM v1.0 on ${new Date().toLocaleString()}
+  Generated by SoilNail BIM v2.0 on ${new Date().toLocaleString()}
 </div>
 </body>
 </html>`;
@@ -417,6 +790,29 @@ ${info.description ? `<p>${escapeHTML(info.description)}</p>` : ''}
 
   function escapeHTML(str) {
     return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  }
+
+  function escapeIFC(str) {
+    return (str || '').replace(/'/g, "''").replace(/\\/g, '\\\\');
+  }
+
+  // Generate IFC-compatible GUID (22 char base64)
+  function generateIFCGUID() {
+    const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$';
+    let guid = '';
+    for (let i = 0; i < 22; i++) {
+      guid += chars.charAt(Math.floor(Math.random() * 64));
+    }
+    return guid;
+  }
+
+  // Generate standard UUID
+  function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
   }
 
   return { init };

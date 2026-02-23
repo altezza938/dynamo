@@ -1,7 +1,7 @@
 /* ============================================
-   Preview Module
-   Renders the cross-section with soil nails
-   on the preview canvas.
+   Preview Module v2.0
+   Enhanced cross-section rendering with
+   dark mode support and improved visuals.
    ============================================ */
 
 const PreviewModule = (() => {
@@ -46,6 +46,31 @@ const PreviewModule = (() => {
     draw();
   }
 
+  // ---- Theme colors ----
+  function getColors() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    return {
+      gridLine: isDark ? 'rgba(255,255,255,0.03)' : '#f0f0f0',
+      gridText: isDark ? '#3d4a5c' : '#94a3b8',
+      terrainFill: isDark
+        ? 'rgba(120, 90, 50, 0.2)'
+        : 'rgba(180, 140, 90, 0.35)',
+      terrainFillEnd: isDark
+        ? 'rgba(80, 60, 30, 0.3)'
+        : 'rgba(140, 100, 60, 0.45)',
+      terrainStroke: isDark ? '#a07840' : '#6b4423',
+      terrainDot: isDark ? '#a07840' : '#6b4423',
+      nailStroke: '#3b82f6',
+      nailHead: '#ef4444',
+      nailHeadStroke: isDark ? '#1a1f35' : '#ffffff',
+      nailTip: '#3b82f6',
+      drillHole: isDark ? 'rgba(163,163,163,0.2)' : 'rgba(163,163,163,0.4)',
+      labelColor: isDark ? '#6b8db5' : '#1e40af',
+      dimColor: isDark ? '#5a6a7a' : '#94a3b8',
+      dimText: isDark ? '#7a8a9a' : '#475569',
+    };
+  }
+
   function worldToScreen(wx, wy) {
     return {
       x: panOffset.x + wx * scale,
@@ -84,7 +109,7 @@ const PreviewModule = (() => {
 
   function onMouseUp() {
     isPanning = false;
-    canvas.style.cursor = 'crosshair';
+    canvas.style.cursor = 'grab';
   }
 
   function onWheel(e) {
@@ -142,7 +167,6 @@ const PreviewModule = (() => {
       return;
     }
 
-    // Collect all relevant points
     const allX = terrainPoints.map(p => p.x);
     const allY = terrainPoints.map(p => p.y);
     if (layout && layout.rows.length) {
@@ -164,7 +188,6 @@ const PreviewModule = (() => {
     panOffset.x = PADDING + (availW - rangeX * scale) / 2 - minX * scale;
     panOffset.y = 0;
 
-    // Adjust vertical centering
     const topScreen = worldToScreen(0, maxY);
     const botScreen = worldToScreen(0, minY);
     const midScreen = (topScreen.y + botScreen.y) / 2;
@@ -189,12 +212,13 @@ const PreviewModule = (() => {
   }
 
   function drawGrid() {
+    const colors = getColors();
     const w = canvas.width;
     const h = canvas.height;
-    ctx.strokeStyle = '#f0f0f0';
+    ctx.strokeStyle = colors.gridLine;
     ctx.lineWidth = 0.5;
-    ctx.font = '10px -apple-system, sans-serif';
-    ctx.fillStyle = '#94a3b8';
+    ctx.font = '10px Inter, -apple-system, sans-serif';
+    ctx.fillStyle = colors.gridText;
 
     const rawStep = 60 / scale;
     const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
@@ -223,10 +247,11 @@ const PreviewModule = (() => {
   }
 
   function drawTerrain() {
+    const colors = getColors();
     const points = TerrainModule.getPoints();
     if (points.length < 2) return;
 
-    // Ground fill
+    // Ground fill with gradient
     ctx.beginPath();
     const first = worldToScreen(points[0].x, points[0].y);
     ctx.moveTo(first.x, first.y);
@@ -241,10 +266,9 @@ const PreviewModule = (() => {
     ctx.lineTo(bl.x, bl.y);
     ctx.closePath();
 
-    // Hatch pattern for soil
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, 'rgba(180, 140, 90, 0.35)');
-    gradient.addColorStop(1, 'rgba(140, 100, 60, 0.45)');
+    gradient.addColorStop(0, colors.terrainFill);
+    gradient.addColorStop(1, colors.terrainFillEnd);
     ctx.fillStyle = gradient;
     ctx.fill();
 
@@ -255,25 +279,27 @@ const PreviewModule = (() => {
       const s = worldToScreen(points[i].x, points[i].y);
       ctx.lineTo(s.x, s.y);
     }
-    ctx.strokeStyle = '#6b4423';
+    ctx.strokeStyle = colors.terrainStroke;
     ctx.lineWidth = 3;
     ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
     ctx.stroke();
 
     // Surface dots
     points.forEach(p => {
       const s = worldToScreen(p.x, p.y);
       ctx.beginPath();
-      ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
-      ctx.fillStyle = '#6b4423';
+      ctx.arc(s.x, s.y, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = colors.terrainDot;
       ctx.fill();
     });
   }
 
   function drawNails() {
+    const colors = getColors();
     if (!layout || !layout.rows) return;
 
-    layout.rows.forEach((row, idx) => {
+    layout.rows.forEach((row) => {
       const startS = worldToScreen(row.start.x, row.start.y);
       const endS = worldToScreen(row.end.x, row.end.y);
 
@@ -281,16 +307,18 @@ const PreviewModule = (() => {
       ctx.beginPath();
       ctx.moveTo(startS.x, startS.y);
       ctx.lineTo(endS.x, endS.y);
-      ctx.strokeStyle = 'rgba(163,163,163,0.4)';
+      ctx.strokeStyle = colors.drillHole;
       ctx.lineWidth = Math.max(3, (layout.params.drillDiameter / 1000) * scale * 0.8);
+      ctx.lineCap = 'round';
       ctx.stroke();
 
       // Nail bar
       ctx.beginPath();
       ctx.moveTo(startS.x, startS.y);
       ctx.lineTo(endS.x, endS.y);
-      ctx.strokeStyle = '#3b82f6';
+      ctx.strokeStyle = colors.nailStroke;
       ctx.lineWidth = Math.max(1.5, (layout.params.barDiameter / 1000) * scale * 0.5);
+      ctx.lineCap = 'round';
       ctx.stroke();
 
       // Head plate
@@ -298,33 +326,33 @@ const PreviewModule = (() => {
       const platePx = Math.max(6, plateWorldSize * scale);
       ctx.beginPath();
       ctx.arc(startS.x, startS.y, platePx / 2, 0, Math.PI * 2);
-      ctx.fillStyle = '#ef4444';
+      ctx.fillStyle = colors.nailHead;
       ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = colors.nailHeadStroke;
+      ctx.lineWidth = 1.5;
       ctx.stroke();
 
       // Nail tip marker
       ctx.beginPath();
-      ctx.arc(endS.x, endS.y, 2, 0, Math.PI * 2);
-      ctx.fillStyle = '#3b82f6';
+      ctx.arc(endS.x, endS.y, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = colors.nailTip;
       ctx.fill();
 
       // Labels
       if (showLabels) {
-        ctx.font = '11px -apple-system, sans-serif';
-        ctx.fillStyle = '#1e40af';
-        ctx.fillText(`R${row.rowNumber}`, startS.x + 8, startS.y - 6);
+        ctx.font = '600 11px Inter, -apple-system, sans-serif';
+        ctx.fillStyle = colors.labelColor;
+        ctx.fillText(`R${row.rowNumber}`, startS.x + 10, startS.y - 8);
       }
     });
   }
 
   function drawDimensions() {
+    const colors = getColors();
     if (!layout || layout.rows.length < 2) return;
     const rows = layout.rows;
     const params = layout.params;
 
-    // Vertical spacing dimension line
     const firstRow = rows[0];
     const secondRow = rows[1];
     const dimX = worldToScreen(firstRow.start.x, 0).x + 30;
@@ -333,52 +361,48 @@ const PreviewModule = (() => {
     const s2 = worldToScreen(secondRow.start.x, secondRow.elevation);
 
     ctx.setLineDash([3, 3]);
-    ctx.strokeStyle = '#94a3b8';
+    ctx.strokeStyle = colors.dimColor;
     ctx.lineWidth = 1;
 
-    // Horizontal extension lines
     ctx.beginPath();
     ctx.moveTo(s1.x, s1.y); ctx.lineTo(dimX + 10, s1.y);
     ctx.moveTo(s2.x, s2.y); ctx.lineTo(dimX + 10, s2.y);
     ctx.stroke();
 
-    // Vertical dimension line
     ctx.setLineDash([]);
     ctx.beginPath();
     ctx.moveTo(dimX, s1.y); ctx.lineTo(dimX, s2.y);
     ctx.stroke();
 
-    // Arrowheads
-    drawArrowhead(ctx, dimX, s1.y, 0, -1);
-    drawArrowhead(ctx, dimX, s2.y, 0, 1);
+    drawArrowhead(ctx, dimX, s1.y, 0, -1, colors.dimColor);
+    drawArrowhead(ctx, dimX, s2.y, 0, 1, colors.dimColor);
 
-    // Dimension text
-    ctx.font = '10px -apple-system, sans-serif';
-    ctx.fillStyle = '#475569';
+    ctx.font = '500 10px Inter, -apple-system, sans-serif';
+    ctx.fillStyle = colors.dimText;
     const midY = (s1.y + s2.y) / 2;
     ctx.fillText(`${params.vSpacing.toFixed(1)}m`, dimX + 5, midY + 3);
 
-    // Nail length dimension (on first nail)
+    // Nail length dimension
     if (rows.length > 0) {
       const r = rows[0];
       const ns = worldToScreen(r.start.x, r.start.y);
       const ne = worldToScreen(r.end.x, r.end.y);
       const mx = (ns.x + ne.x) / 2;
       const my = (ns.y + ne.y) / 2;
-      ctx.fillStyle = '#1e40af';
-      ctx.font = 'bold 11px -apple-system, sans-serif';
-      ctx.fillText(`L=${r.nailLength}m @ ${r.inclination}\u00B0`, mx, my - 10);
+      ctx.fillStyle = colors.labelColor;
+      ctx.font = '700 11px Inter, -apple-system, sans-serif';
+      ctx.fillText(`L=${r.nailLength}m @ ${r.inclination}\u00B0`, mx, my - 12);
     }
   }
 
-  function drawArrowhead(context, x, y, dx, dy) {
+  function drawArrowhead(context, x, y, dx, dy, color) {
     const size = 5;
     context.beginPath();
     context.moveTo(x, y);
     context.lineTo(x - size * 0.5, y - size * dy);
     context.lineTo(x + size * 0.5, y - size * dy);
     context.closePath();
-    context.fillStyle = '#94a3b8';
+    context.fillStyle = color;
     context.fill();
   }
 

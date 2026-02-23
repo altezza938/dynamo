@@ -1,36 +1,38 @@
 /* ============================================
-   Terrain Profile Module
-   Handles terrain cross-section definition via
-   interactive canvas drawing and table input.
+   Terrain Profile Module v2.0
+   Interactive canvas drawing and table input
+   with improved UX and dark mode support.
    ============================================ */
 
 const TerrainModule = (() => {
-  // State
   let points = [];
   let canvas, ctx;
-  let mode = 'draw'; // 'draw' | 'select'
+  let mode = 'draw';
   let selectedPointIndex = -1;
   let dragging = false;
   let panOffset = { x: 60, y: 0 };
   let scale = 1;
   let hoveredPointIndex = -1;
 
-  // Canvas coordinate system: world coords (meters) mapped to screen
   const PADDING = 60;
   const POINT_RADIUS = 6;
-  const POINT_RADIUS_HOVER = 8;
+  const POINT_RADIUS_HOVER = 9;
 
   function init() {
     canvas = document.getElementById('terrainCanvas');
     ctx = canvas.getContext('2d');
     resizeCanvas();
 
-    // Event listeners
     canvas.addEventListener('mousedown', onMouseDown);
     canvas.addEventListener('mousemove', onMouseMove);
     canvas.addEventListener('mouseup', onMouseUp);
     canvas.addEventListener('mouseleave', onMouseLeave);
     canvas.addEventListener('wheel', onWheel, { passive: false });
+
+    // Touch support
+    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+    canvas.addEventListener('touchend', onTouchEnd);
 
     document.getElementById('btnDrawMode').addEventListener('click', () => setMode('draw'));
     document.getElementById('btnSelectMode').addEventListener('click', () => setMode('select'));
@@ -52,7 +54,7 @@ const TerrainModule = (() => {
     const toolbarH = card.querySelector('.canvas-toolbar')?.offsetHeight || 0;
     const hintH = card.querySelector('.canvas-hint')?.offsetHeight || 0;
     canvas.width = rect.width;
-    canvas.height = Math.max(400, rect.height - toolbarH - hintH);
+    canvas.height = Math.max(350, rect.height - toolbarH - hintH);
     draw();
   }
 
@@ -61,6 +63,23 @@ const TerrainModule = (() => {
     document.getElementById('btnDrawMode').classList.toggle('btn-primary', m === 'draw');
     document.getElementById('btnSelectMode').classList.toggle('btn-primary', m === 'select');
     canvas.style.cursor = m === 'draw' ? 'crosshair' : 'default';
+  }
+
+  // ---- Theme-aware colors ----
+  function getColors() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    return {
+      gridLine: isDark ? 'rgba(255,255,255,0.04)' : '#f0f0f0',
+      gridText: isDark ? '#4a5568' : '#94a3b8',
+      axisLine: isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1',
+      terrainFill: isDark ? 'rgba(140,100,60,0.2)' : 'rgba(212,165,116,0.3)',
+      terrainStroke: isDark ? '#a07840' : '#8b6914',
+      pointFill: '#3b82f6',
+      pointHover: '#2563eb',
+      pointSelected: '#ef4444',
+      pointStroke: isDark ? '#1a1f35' : '#ffffff',
+      labelColor: isDark ? '#8ba2c4' : '#475569',
+    };
   }
 
   // ---- Coordinate Transforms ----
@@ -96,7 +115,7 @@ const TerrainModule = (() => {
     scale = Math.min(availW / rangeX, availH / rangeY) * 0.85;
     panOffset.x = PADDING + (availW - rangeX * scale) / 2 - minX * scale;
     panOffset.y = -(PADDING + (availH - rangeY * scale) / 2 - minY * scale) + (canvas.height - PADDING * 2 - rangeY * scale) / 2;
-    // Recalculate to properly center
+
     const testMin = worldToScreen(minX, minY);
     const testMax = worldToScreen(maxX, maxY);
     const centeredOffsetX = (canvas.width - (testMax.x - testMin.x)) / 2 - testMin.x + panOffset.x;
@@ -110,7 +129,7 @@ const TerrainModule = (() => {
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
 
-  function findNearestPoint(sx, sy, threshold = 12) {
+  function findNearestPoint(sx, sy, threshold = 14) {
     let minDist = Infinity, idx = -1;
     points.forEach((p, i) => {
       const sp = worldToScreen(p.x, p.y);
@@ -127,7 +146,6 @@ const TerrainModule = (() => {
     const pos = getMousePos(e);
     if (mode === 'draw') {
       const world = screenToWorld(pos.x, pos.y);
-      // Round to 2 decimal places
       world.x = Math.round(world.x * 100) / 100;
       world.y = Math.round(world.y * 100) / 100;
       points.push(world);
@@ -192,6 +210,27 @@ const TerrainModule = (() => {
     draw();
   }
 
+  // ---- Touch Events ----
+  function onTouchStart(e) {
+    if (e.touches.length === 1) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      onMouseDown({ clientX: touch.clientX, clientY: touch.clientY });
+    }
+  }
+
+  function onTouchMove(e) {
+    if (e.touches.length === 1) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      onMouseMove({ clientX: touch.clientX, clientY: touch.clientY });
+    }
+  }
+
+  function onTouchEnd() {
+    onMouseUp();
+  }
+
   // ---- Drawing ----
   function draw() {
     if (!ctx) return;
@@ -209,15 +248,15 @@ const TerrainModule = (() => {
   }
 
   function drawGrid() {
+    const colors = getColors();
     const w = canvas.width;
     const h = canvas.height;
-    ctx.strokeStyle = '#f0f0f0';
+    ctx.strokeStyle = colors.gridLine;
     ctx.lineWidth = 1;
-    ctx.font = '10px -apple-system, sans-serif';
-    ctx.fillStyle = '#94a3b8';
+    ctx.font = '10px Inter, -apple-system, sans-serif';
+    ctx.fillStyle = colors.gridText;
 
-    // Determine nice grid spacing
-    const rawStep = 50 / scale; // ~50px per grid line
+    const rawStep = 50 / scale;
     const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
     let step = mag;
     if (rawStep / mag > 5) step = mag * 10;
@@ -232,7 +271,6 @@ const TerrainModule = (() => {
     const startY = Math.floor(worldBR.y / step) * step;
     const endY = Math.ceil(worldTL.y / step) * step;
 
-    // Vertical lines
     for (let x = startX; x <= endX; x += step) {
       const sx = worldToScreen(x, 0).x;
       ctx.beginPath();
@@ -242,7 +280,6 @@ const TerrainModule = (() => {
       ctx.fillText(formatNum(x), sx + 3, h - 5);
     }
 
-    // Horizontal lines
     for (let y = startY; y <= endY; y += step) {
       const sy = worldToScreen(0, y).y;
       ctx.beginPath();
@@ -253,7 +290,7 @@ const TerrainModule = (() => {
     }
 
     // Axis lines
-    ctx.strokeStyle = '#cbd5e1';
+    ctx.strokeStyle = colors.axisLine;
     ctx.lineWidth = 1.5;
     const originScreen = worldToScreen(0, 0);
     ctx.beginPath();
@@ -267,6 +304,7 @@ const TerrainModule = (() => {
   }
 
   function drawTerrainFill() {
+    const colors = getColors();
     if (points.length < 2) return;
     const sorted = [...points].sort((a, b) => a.x - b.x);
     ctx.beginPath();
@@ -276,7 +314,6 @@ const TerrainModule = (() => {
       const s = worldToScreen(sorted[i].x, sorted[i].y);
       ctx.lineTo(s.x, s.y);
     }
-    // Close downward
     const lastPt = sorted[sorted.length - 1];
     const bottomY = Math.min(...sorted.map(p => p.y)) - 2;
     const br = worldToScreen(lastPt.x, bottomY);
@@ -284,17 +321,19 @@ const TerrainModule = (() => {
     ctx.lineTo(br.x, br.y);
     ctx.lineTo(bl.x, bl.y);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(212,165,116,0.3)';
+    ctx.fillStyle = colors.terrainFill;
     ctx.fill();
   }
 
   function drawTerrainLine() {
+    const colors = getColors();
     if (points.length < 2) return;
     const sorted = [...points].sort((a, b) => a.x - b.x);
     ctx.beginPath();
-    ctx.strokeStyle = '#8b6914';
+    ctx.strokeStyle = colors.terrainStroke;
     ctx.lineWidth = 2.5;
     ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
     const first = worldToScreen(sorted[0].x, sorted[0].y);
     ctx.moveTo(first.x, first.y);
     for (let i = 1; i < sorted.length; i++) {
@@ -305,23 +344,32 @@ const TerrainModule = (() => {
   }
 
   function drawPoints() {
+    const colors = getColors();
     points.forEach((p, i) => {
       const s = worldToScreen(p.x, p.y);
       const isHovered = i === hoveredPointIndex;
       const isSelected = i === selectedPointIndex && dragging;
       const r = isHovered || isSelected ? POINT_RADIUS_HOVER : POINT_RADIUS;
 
+      // Glow effect for hovered/selected
+      if (isHovered || isSelected) {
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, r + 4, 0, Math.PI * 2);
+        ctx.fillStyle = isSelected ? 'rgba(239,68,68,0.15)' : 'rgba(59,130,246,0.15)';
+        ctx.fill();
+      }
+
       ctx.beginPath();
       ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = isSelected ? '#ef4444' : isHovered ? '#2563eb' : '#3b82f6';
+      ctx.fillStyle = isSelected ? colors.pointSelected : isHovered ? colors.pointHover : colors.pointFill;
       ctx.fill();
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = colors.pointStroke;
       ctx.lineWidth = 2;
       ctx.stroke();
 
       // Label
-      ctx.fillStyle = '#475569';
-      ctx.font = '10px -apple-system, sans-serif';
+      ctx.fillStyle = colors.labelColor;
+      ctx.font = '10px Inter, -apple-system, sans-serif';
       ctx.fillText(`${i + 1}`, s.x + r + 4, s.y - 4);
     });
   }
@@ -348,7 +396,6 @@ const TerrainModule = (() => {
       tbody.appendChild(tr);
     });
 
-    // Attach events to inputs
     tbody.querySelectorAll('input[type="number"]').forEach(inp => {
       inp.addEventListener('change', (e) => {
         const idx = parseInt(e.target.dataset.index);
@@ -359,7 +406,6 @@ const TerrainModule = (() => {
       });
     });
 
-    // Attach delete buttons
     tbody.querySelectorAll('.btn-delete-row').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const idx = parseInt(e.currentTarget.dataset.index);
@@ -395,7 +441,6 @@ const TerrainModule = (() => {
       const lines = text.trim().split('\n');
       let imported = 0;
       lines.forEach(line => {
-        // Skip header lines
         if (line.match(/[a-zA-Z]/) && !line.match(/^[\d\s,.\-+]+$/)) return;
         const parts = line.split(/[,\t;]+/).map(s => parseFloat(s.trim()));
         if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
@@ -446,7 +491,6 @@ const TerrainModule = (() => {
   }
 
   function loadSample() {
-    // Sample: a typical soil nail slope profile
     points = [
       { x: 0, y: 0 },
       { x: 2, y: 0 },
@@ -466,13 +510,19 @@ const TerrainModule = (() => {
     if (typeof App !== 'undefined') App.showToast('Sample slope profile loaded', 'success');
   }
 
-  // Public API
+  // ---- Public API ----
   function getPoints() {
     return [...points].sort((a, b) => a.x - b.x);
   }
 
+  function setPoints(pts) {
+    points = pts.map(p => ({ x: p.x, y: p.y }));
+    updateTable();
+    updateStats();
+    fitView();
+  }
+
   function getSlopeSegments() {
-    // Returns array of { start, end, length, angle } for each segment of the slope face
     const sorted = getPoints();
     const segments = [];
     for (let i = 1; i < sorted.length; i++) {
@@ -488,5 +538,5 @@ const TerrainModule = (() => {
     return segments;
   }
 
-  return { init, getPoints, getSlopeSegments, fitView, draw, resizeCanvas };
+  return { init, getPoints, setPoints, getSlopeSegments, fitView, draw, resizeCanvas };
 })();

@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoilNail BIM - Soil Nail Placement Tool for Revit & Civil 3D</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Sidebar Navigation -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 28 L16 4 L28 28 Z" stroke-linejoin="round"/>
+            <line x1="10" y1="18" x2="22" y2="12" stroke-dasharray="2,2"/>
+            <line x1="8" y1="22" x2="20" y2="16" stroke-dasharray="2,2"/>
+            <line x1="6" y1="26" x2="18" y2="20" stroke-dasharray="2,2"/>
+          </svg>
+        </div>
+        <div class="logo-text-wrap">
+          <span class="logo-text">SoilNail</span>
+          <span class="logo-badge">BIM</span>
+        </div>
+      </div>
+    </div>
+    <ul class="nav-list">
+      <li class="nav-item active" data-section="project">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+        </div>
+        <span class="nav-label">Project</span>
+        <span class="nav-step">1</span>
+      </li>
+      <li class="nav-item" data-section="terrain">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M2 20 L7 10 L12 14 L17 6 L22 12 L22 20 Z"/>
+          </svg>
+        </div>
+        <span class="nav-label">Terrain</span>
+        <span class="nav-step">2</span>
+      </li>
+      <li class="nav-item" data-section="nails">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="4" y1="20" x2="18" y2="8"/>
+            <circle cx="18" cy="8" r="2"/>
+            <line x1="6" y1="22" x2="20" y2="10"/>
+            <circle cx="20" cy="10" r="2"/>
+          </svg>
+        </div>
+        <span class="nav-label">Nail Parameters</span>
+        <span class="nav-step">3</span>
+      </li>
+      <li class="nav-item" data-section="preview">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+        </div>
+        <span class="nav-label">Preview</span>
+        <span class="nav-step">4</span>
+      </li>
+      <li class="nav-item" data-section="export">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </div>
+        <span class="nav-label">Export</span>
+        <span class="nav-step">5</span>
+      </li>
+    </ul>
+    <div class="sidebar-footer">
+      <button class="btn-theme-toggle" id="btnThemeToggle" title="Toggle dark mode">
+        <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+      <div class="version-info">v2.0 &middot; BIM Export</div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content" id="mainContent">
+
+    <!-- ========== PROJECT SECTION ========== -->
+    <section class="content-section active" id="section-project">
+      <div class="section-header">
+        <div class="section-header-text">
+          <h1>Project Setup</h1>
+          <p class="section-desc">Configure your soil nail project details and coordinate system.</p>
+        </div>
+        <div class="section-actions">
+          <button class="btn btn-ghost" id="btnLoadProject">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Load Project
+          </button>
+          <button class="btn btn-ghost" id="btnSaveProject">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Save Project
+          </button>
+        </div>
+      </div>
+
+      <div class="cards-grid">
+        <!-- Hero / Quick Start Card -->
+        <div class="card card-hero card-wide">
+          <div class="hero-content">
+            <div class="hero-text">
+              <h2>Soil Nail BIM Generator</h2>
+              <p>Design soil nail layouts and export directly to <strong>Revit (IFC)</strong>, <strong>Civil 3D (Dynamo/DXF)</strong>, and <strong>AutoCAD</strong>. Follow the step-by-step workflow to define your terrain, configure nail parameters, preview the layout, and export BIM-ready files.</p>
+            </div>
+            <div class="hero-steps">
+              <div class="step-flow">
+                <div class="step-item" data-go="terrain">
+                  <div class="step-circle">1</div>
+                  <div class="step-info">
+                    <strong>Terrain</strong>
+                    <small>Draw slope profile</small>
+                  </div>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step-item" data-go="nails">
+                  <div class="step-circle">2</div>
+                  <div class="step-info">
+                    <strong>Parameters</strong>
+                    <small>Spacing & elevation</small>
+                  </div>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step-item" data-go="preview">
+                  <div class="step-circle">3</div>
+                  <div class="step-info">
+                    <strong>Preview</strong>
+                    <small>Verify layout</small>
+                  </div>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step-item" data-go="export">
+                  <div class="step-circle">4</div>
+                  <div class="step-info">
+                    <strong>Export</strong>
+                    <small>IFC / DXF / Dynamo</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Project Information
+          </h3>
+          <div class="form-group">
+            <label for="projectName">Project Name</label>
+            <input type="text" id="projectName" placeholder="e.g. Highway Slope Stabilization">
+          </div>
+          <div class="form-group">
+            <label for="projectNumber">Project Number</label>
+            <input type="text" id="projectNumber" placeholder="e.g. PRJ-2026-001">
+          </div>
+          <div class="form-group">
+            <label for="projectDesc">Description</label>
+            <textarea id="projectDesc" rows="3" placeholder="Brief description of the soil nailing works..."></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="designer">Designer</label>
+              <input type="text" id="designer" placeholder="Name">
+            </div>
+            <div class="form-group">
+              <label for="checker">Checker</label>
+              <input type="text" id="checker" placeholder="Name">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            Coordinate System & Units
+          </h3>
+          <div class="form-group">
+            <label for="coordSystem">Coordinate System</label>
+            <select id="coordSystem">
+              <option value="local">Local Grid</option>
+              <option value="wgs84">WGS 84</option>
+              <option value="utm">UTM</option>
+              <option value="stateplane">State Plane</option>
+              <option value="osgb36">OSGB 36 (British National Grid)</option>
+              <option value="hk80">HK80 Grid</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="unitLength">Length Unit</label>
+              <select id="unitLength">
+                <option value="m">Meters (m)</option>
+                <option value="mm">Millimeters (mm)</option>
+                <option value="ft">Feet (ft)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="unitAngle">Angle Unit</label>
+              <select id="unitAngle">
+                <option value="deg">Degrees</option>
+                <option value="rad">Radians</option>
+                <option value="grad">Gradians</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="baseElevation">Base Elevation (datum)</label>
+            <input type="number" id="baseElevation" value="0" step="0.1">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="baseEasting">Base Easting (X)</label>
+              <input type="number" id="baseEasting" value="0" step="0.1">
+            </div>
+            <div class="form-group">
+              <label for="baseNorthing">Base Northing (Y)</label>
+              <input type="number" id="baseNorthing" value="0" step="0.1">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-nav-buttons">
+        <div></div>
+        <button class="btn btn-primary btn-next" data-go="terrain">
+          Next: Terrain Profile
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- ========== TERRAIN SECTION ========== -->
+    <section class="content-section" id="section-terrain">
+      <div class="section-header">
+        <div class="section-header-text">
+          <h1>Terrain Profile</h1>
+          <p class="section-desc">Define the slope cross-section by drawing on the canvas or entering coordinates.</p>
+        </div>
+      </div>
+      <div class="terrain-layout">
+        <div class="card terrain-canvas-card">
+          <div class="canvas-toolbar">
+            <button class="btn btn-sm btn-primary" id="btnDrawMode" title="Click on canvas to add points">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+              Draw
+            </button>
+            <button class="btn btn-sm" id="btnSelectMode" title="Click to select and drag points">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>
+              Select
+            </button>
+            <div class="toolbar-separator"></div>
+            <button class="btn btn-sm" id="btnZoomFit" title="Fit view to terrain">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h18"/></svg>
+              Fit
+            </button>
+            <button class="btn btn-sm btn-danger-ghost" id="btnClearTerrain" title="Clear all points">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              Clear
+            </button>
+            <div class="toolbar-separator"></div>
+            <button class="btn btn-sm btn-accent" id="btnLoadSample" title="Load a sample slope profile">
+              Sample Profile
+            </button>
+            <div class="toolbar-spacer"></div>
+            <span class="canvas-coords" id="canvasCoords">X: -- Y: --</span>
+          </div>
+          <canvas id="terrainCanvas" width="900" height="500"></canvas>
+          <div class="canvas-hint" id="canvasHint">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            Click on canvas to add terrain profile points (left to right). Points define the slope face cross-section. Use scroll to zoom.
+          </div>
+        </div>
+        <div class="card terrain-table-card">
+          <h3>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/></svg>
+            Profile Points
+          </h3>
+          <div class="table-actions">
+            <button class="btn btn-sm btn-primary" id="btnAddPoint">+ Add Point</button>
+            <button class="btn btn-sm" id="btnSortPoints">Sort by X</button>
+            <button class="btn btn-sm" id="btnImportCSV">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              CSV
+            </button>
+            <input type="file" id="csvFileInput" accept=".csv,.txt" style="display:none">
+          </div>
+          <div class="table-scroll">
+            <table class="data-table" id="terrainTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>X (m)</th>
+                  <th>Y (m)</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="terrainTableBody">
+              </tbody>
+            </table>
+          </div>
+          <div class="terrain-stats" id="terrainStats">
+            <div class="stat"><span class="stat-label">Points</span><span class="stat-value" id="statPoints">0</span></div>
+            <div class="stat"><span class="stat-label">Slope Length</span><span class="stat-value" id="statLength">--</span></div>
+            <div class="stat"><span class="stat-label">Height Diff</span><span class="stat-value" id="statHeight">--</span></div>
+            <div class="stat"><span class="stat-label">Avg Angle</span><span class="stat-value" id="statAngle">--</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="section-nav-buttons">
+        <button class="btn btn-ghost btn-prev" data-go="project">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          Back
+        </button>
+        <button class="btn btn-primary btn-next" data-go="nails">
+          Next: Nail Parameters
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- ========== NAIL PARAMETERS SECTION ========== -->
+    <section class="content-section" id="section-nails">
+      <div class="section-header">
+        <div class="section-header-text">
+          <h1>Nail Parameters</h1>
+          <p class="section-desc">Configure soil nail geometry, spacing, material properties, and corrosion protection.</p>
+        </div>
+      </div>
+      <div class="cards-grid cards-grid-3">
+
+        <div class="card">
+          <h3>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+            Nail Geometry
+          </h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="nailLength">Nail Length (m)</label>
+              <input type="number" id="nailLength" value="6" min="1" max="30" step="0.5">
+            </div>
+            <div class="form-group">
+              <label for="nailInclination">Inclination (&deg; below horiz.)</label>
+              <input type="number" id="nailInclination" value="15" min="0" max="45" step="1">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="barDiameter">Bar Diameter (mm)</label>
+              <select id="barDiameter">
+                <option value="20">20 mm</option>
+                <option value="25" selected>25 mm</option>
+                <option value="28">28 mm</option>
+                <option value="32">32 mm</option>
+                <option value="36">36 mm</option>
+                <option value="40">40 mm</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="drillDiameter">Drill Hole Dia. (mm)</label>
+              <select id="drillDiameter">
+                <option value="76">76 mm</option>
+                <option value="100" selected>100 mm</option>
+                <option value="115">115 mm</option>
+                <option value="127">127 mm</option>
+                <option value="150">150 mm</option>
+                <option value="200">200 mm</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Variable Length by Row</label>
+            <div class="toggle-group">
+              <label class="toggle">
+                <input type="checkbox" id="variableLength">
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="toggle-label">Enable variable nail lengths per row</span>
+            </div>
+          </div>
+          <div id="variableLengthConfig" class="sub-config hidden">
+            <p class="hint">Configure individual row lengths after generating the layout in the Preview section.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Spacing & Layout
+          </h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="hSpacing">Horizontal Spacing (m)</label>
+              <input type="number" id="hSpacing" value="1.5" min="0.5" max="5" step="0.1">
+              <span class="field-hint">Along the wall width</span>
+            </div>
+            <div class="form-group">
+              <label for="vSpacing">Vertical Spacing (m)</label>
+              <input type="number" id="vSpacing" value="1.5" min="0.5" max="5" step="0.1">
+              <span class="field-hint">Between rows on slope</span>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="topOffset">Top Offset (m)</label>
+              <input type="number" id="topOffset" value="0.5" min="0" max="5" step="0.1">
+              <span class="field-hint">Crest to first row</span>
+            </div>
+            <div class="form-group">
+              <label for="bottomOffset">Bottom Offset (m)</label>
+              <input type="number" id="bottomOffset" value="0.5" min="0" max="5" step="0.1">
+              <span class="field-hint">Toe to last row</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="patternType">Pattern Type</label>
+            <select id="patternType">
+              <option value="rectangular">Rectangular Grid</option>
+              <option value="staggered">Staggered (Offset Rows)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="wallExtent">Wall Extent / Width (m)</label>
+            <input type="number" id="wallExtent" value="10" min="1" max="200" step="1">
+            <span class="field-hint">Total width of the nail wall along the slope face</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M12 12h.01"/><path d="M17 12h.01"/><path d="M7 12h.01"/></svg>
+            Head Plate & Facing
+          </h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="plateSize">Plate Size (mm)</label>
+              <select id="plateSize">
+                <option value="150">150 x 150</option>
+                <option value="200" selected>200 x 200</option>
+                <option value="225">225 x 225</option>
+                <option value="250">250 x 250</option>
+                <option value="300">300 x 300</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="plateThickness">Plate Thickness (mm)</label>
+              <select id="plateThickness">
+                <option value="10">10 mm</option>
+                <option value="12">12 mm</option>
+                <option value="15" selected>15 mm</option>
+                <option value="20">20 mm</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="facingType">Facing Type</label>
+            <select id="facingType">
+              <option value="shotcrete">Shotcrete (100mm)</option>
+              <option value="shotcrete150">Shotcrete (150mm)</option>
+              <option value="mesh">Welded Wire Mesh</option>
+              <option value="precast">Precast Concrete Panels</option>
+              <option value="vegetated">Vegetated / Erosion Mat</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Material Properties
+          </h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="steelGrade">Steel Grade</label>
+              <select id="steelGrade">
+                <option value="460">Grade 460 (fy=460 MPa)</option>
+                <option value="500" selected>Grade 500 (fy=500 MPa)</option>
+                <option value="520">Grade 520 (fy=520 MPa)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="groutStrength">Grout Strength (MPa)</label>
+              <input type="number" id="groutStrength" value="30" min="10" max="60" step="5">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="corrosionProtection">Corrosion Protection</label>
+            <select id="corrosionProtection">
+              <option value="none">None (Bare Steel)</option>
+              <option value="galvanized">Hot-Dip Galvanized</option>
+              <option value="epoxy">Epoxy Coated</option>
+              <option value="encapsulated" selected>Encapsulated (Double Protection)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Centralizers</label>
+            <div class="toggle-group">
+              <label class="toggle">
+                <input type="checkbox" id="centralizers" checked>
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="toggle-label">Include centralizers</span>
+            </div>
+          </div>
+          <div class="form-row" id="centralizerSpacingRow">
+            <div class="form-group">
+              <label for="centralizerSpacing">Centralizer Spacing (m)</label>
+              <input type="number" id="centralizerSpacing" value="1.0" min="0.3" max="3" step="0.1">
+            </div>
+          </div>
+        </div>
+
+        <!-- Visual Nail Diagram Card -->
+        <div class="card card-wide nail-diagram-card">
+          <h3>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            Nail Cross-Section Diagram
+          </h3>
+          <canvas id="nailDiagramCanvas" width="800" height="200"></canvas>
+        </div>
+      </div>
+
+      <div class="section-nav-buttons">
+        <button class="btn btn-ghost btn-prev" data-go="terrain">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          Back
+        </button>
+        <button class="btn btn-primary btn-next" data-go="preview">
+          Next: Preview Layout
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- ========== PREVIEW SECTION ========== -->
+    <section class="content-section" id="section-preview">
+      <div class="section-header">
+        <div class="section-header-text">
+          <h1>Cross-Section Preview</h1>
+          <p class="section-desc">Interactive preview of the soil nail layout on the terrain cross-section.</p>
+        </div>
+        <div class="section-actions">
+          <button class="btn btn-primary" id="btnGenerateLayout">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Generate Layout
+          </button>
+        </div>
+      </div>
+      <div class="preview-layout">
+        <div class="card preview-canvas-card">
+          <div class="canvas-toolbar">
+            <button class="btn btn-sm" id="btnToggleGrid">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+              Grid
+            </button>
+            <button class="btn btn-sm" id="btnToggleDimensions">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="2" y1="12" x2="22" y2="12"/><polyline points="6 8 2 12 6 16"/><polyline points="18 8 22 12 18 16"/></svg>
+              Dims
+            </button>
+            <button class="btn btn-sm" id="btnToggleLabels">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3"/><line x1="12" y1="4" x2="12" y2="20"/><path d="M8 20h8"/></svg>
+              Labels
+            </button>
+            <div class="toolbar-separator"></div>
+            <button class="btn btn-sm" id="btnPreviewZoomFit">Fit View</button>
+            <div class="toolbar-spacer"></div>
+            <span class="canvas-coords" id="previewCoords">X: -- Y: --</span>
+          </div>
+          <canvas id="previewCanvas" width="1000" height="600"></canvas>
+          <div class="preview-legend">
+            <div class="legend-item"><span class="legend-color" style="background:#6b4423;"></span> Terrain</div>
+            <div class="legend-item"><span class="legend-color" style="background:#3b82f6;"></span> Soil Nail</div>
+            <div class="legend-item"><span class="legend-color" style="background:#ef4444;"></span> Head Plate</div>
+            <div class="legend-item"><span class="legend-color" style="background:#a3a3a3;"></span> Drill Hole</div>
+          </div>
+        </div>
+        <div class="card preview-info-card">
+          <h3>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+            Layout Summary
+          </h3>
+          <div class="summary-grid" id="layoutSummary">
+            <div class="summary-item">
+              <span class="summary-label">Total Nails (section)</span>
+              <span class="summary-value" id="summNailCount">--</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">Number of Rows</span>
+              <span class="summary-value" id="summRowCount">--</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">Nails per Row</span>
+              <span class="summary-value" id="summNailsPerRow">--</span>
+            </div>
+            <div class="summary-item summary-item-highlight">
+              <span class="summary-label">Total Nails (3D)</span>
+              <span class="summary-value" id="summTotalNails3D">--</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">Total Drill Length</span>
+              <span class="summary-value" id="summDrillLength">--</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">Steel Weight (est.)</span>
+              <span class="summary-value" id="summSteelWeight">--</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">Grout Volume (est.)</span>
+              <span class="summary-value" id="summGroutVol">--</span>
+            </div>
+          </div>
+          <h3 style="margin-top:1.5rem;">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            Row Details
+          </h3>
+          <div class="table-scroll">
+            <table class="data-table" id="rowDetailsTable">
+              <thead>
+                <tr>
+                  <th>Row</th>
+                  <th>Elev (m)</th>
+                  <th>Length (m)</th>
+                  <th>Angle</th>
+                </tr>
+              </thead>
+              <tbody id="rowDetailsBody">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="section-nav-buttons">
+        <button class="btn btn-ghost btn-prev" data-go="nails">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          Back
+        </button>
+        <button class="btn btn-primary btn-next" data-go="export">
+          Next: Export Files
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- ========== EXPORT SECTION ========== -->
+    <section class="content-section" id="section-export">
+      <div class="section-header">
+        <div class="section-header-text">
+          <h1>Export BIM Files</h1>
+          <p class="section-desc">Generate and download files for Revit, Civil 3D, Dynamo, and AutoCAD.</p>
+        </div>
+      </div>
+
+      <!-- BIM Exports (Primary) -->
+      <h2 class="export-group-title">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        BIM Model Exports
+      </h2>
+      <div class="cards-grid cards-grid-3">
+        <div class="card export-card export-card-primary">
+          <div class="export-badge">Revit</div>
+          <div class="export-icon">
+            <svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="#8b5cf6" stroke-width="2">
+              <rect x="8" y="4" width="32" height="40" rx="3"/>
+              <path d="M16 16h16M16 22h12M16 28h14M16 34h8" stroke-width="1.5"/>
+              <circle cx="35" cy="35" r="8" fill="#8b5cf6" stroke="none"/>
+              <text x="35" y="39" text-anchor="middle" font-size="10" fill="white" stroke="none" font-weight="bold">R</text>
+            </svg>
+          </div>
+          <h3>IFC File (Revit)</h3>
+          <p>Industry Foundation Classes format. Import directly into <strong>Autodesk Revit</strong> as 3D BIM elements with full geometry and metadata.</p>
+          <button class="btn btn-primary btn-export" id="btnExportIFC">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download IFC
+          </button>
+        </div>
+
+        <div class="card export-card export-card-primary">
+          <div class="export-badge">Dynamo</div>
+          <div class="export-icon">
+            <svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="#f59e0b" stroke-width="2">
+              <rect x="8" y="4" width="32" height="40" rx="3"/>
+              <circle cx="20" cy="18" r="5" stroke-width="1.5"/>
+              <circle cx="32" cy="28" r="5" stroke-width="1.5"/>
+              <line x1="24" y1="20" x2="28" y2="26" stroke-width="1.5"/>
+              <circle cx="16" cy="34" r="4" stroke-width="1.5"/>
+              <line x1="19" y1="32" x2="28" y2="30" stroke-width="1.5"/>
+            </svg>
+          </div>
+          <h3>Dynamo Script (.dyn)</h3>
+          <p>Complete Dynamo workspace with nodes to create soil nails in <strong>Civil 3D / Revit</strong>. Open in Dynamo and run.</p>
+          <button class="btn btn-primary btn-export" id="btnExportDYN">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download DYN
+          </button>
+        </div>
+
+        <div class="card export-card export-card-primary">
+          <div class="export-badge">Civil 3D</div>
+          <div class="export-icon">
+            <svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="#10b981" stroke-width="2">
+              <rect x="8" y="4" width="32" height="40" rx="3"/>
+              <path d="M14 32 L20 20 L26 26 L34 14" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="14" cy="32" r="2" fill="#10b981"/>
+              <circle cx="34" cy="14" r="2" fill="#10b981"/>
+            </svg>
+          </div>
+          <h3>Dynamo JSON Data</h3>
+          <p>JSON data file with full nail geometry and parameters for use with <strong>Dynamo for Civil 3D</strong>.</p>
+          <button class="btn btn-primary btn-export" id="btnExportJSON">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download JSON
+          </button>
+        </div>
+      </div>
+
+      <!-- CAD Exports -->
+      <h2 class="export-group-title">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        CAD & Drawing Exports
+      </h2>
+      <div class="cards-grid cards-grid-3">
+        <div class="card export-card">
+          <div class="export-icon">
+            <svg viewBox="0 0 48 48" width="44" height="44" fill="none" stroke="#3b82f6" stroke-width="2">
+              <rect x="8" y="4" width="32" height="40" rx="2"/>
+              <line x1="14" y1="14" x2="34" y2="14"/><line x1="14" y1="20" x2="34" y2="20"/>
+              <line x1="14" y1="26" x2="34" y2="26"/><line x1="14" y1="32" x2="24" y2="32"/>
+            </svg>
+          </div>
+          <h3>COGO Points CSV</h3>
+          <p>Import directly into Civil 3D as COGO points.</p>
+          <button class="btn btn-primary btn-export" id="btnExportCSV">Download CSV</button>
+        </div>
+
+        <div class="card export-card">
+          <div class="export-icon">
+            <svg viewBox="0 0 48 48" width="44" height="44" fill="none" stroke="#10b981" stroke-width="2">
+              <rect x="8" y="4" width="32" height="40" rx="2"/>
+              <text x="24" y="28" text-anchor="middle" font-size="10" fill="#10b981" stroke="none" font-family="monospace">.SCR</text>
+            </svg>
+          </div>
+          <h3>AutoCAD Script</h3>
+          <p>Run with the SCRIPT command in Civil 3D/AutoCAD.</p>
+          <button class="btn btn-primary btn-export" id="btnExportSCR">Download SCR</button>
+        </div>
+
+        <div class="card export-card">
+          <div class="export-icon">
+            <svg viewBox="0 0 48 48" width="44" height="44" fill="none" stroke="#8b5cf6" stroke-width="2">
+              <rect x="8" y="4" width="32" height="40" rx="2"/>
+              <text x="24" y="28" text-anchor="middle" font-size="9" fill="#8b5cf6" stroke="none" font-family="monospace">DXF</text>
+            </svg>
+          </div>
+          <h3>DXF Drawing</h3>
+          <p>Open directly in Civil 3D or AutoCAD with 3D layers.</p>
+          <button class="btn btn-primary btn-export" id="btnExportDXF">Download DXF</button>
+        </div>
+
+        <div class="card export-card">
+          <div class="export-icon">
+            <svg viewBox="0 0 48 48" width="44" height="44" fill="none" stroke="#ec4899" stroke-width="2">
+              <rect x="8" y="4" width="32" height="40" rx="2"/>
+              <text x="24" y="28" text-anchor="middle" font-size="9" fill="#ec4899" stroke="none" font-family="monospace">XML</text>
+            </svg>
+          </div>
+          <h3>LandXML</h3>
+          <p>For civil engineering software and terrain import.</p>
+          <button class="btn btn-primary btn-export" id="btnExportXML">Download XML</button>
+        </div>
+
+        <div class="card export-card">
+          <div class="export-icon">
+            <svg viewBox="0 0 48 48" width="44" height="44" fill="none" stroke="#64748b" stroke-width="2">
+              <rect x="8" y="4" width="32" height="40" rx="2"/>
+              <line x1="14" y1="14" x2="34" y2="14"/><line x1="14" y1="22" x2="34" y2="22"/>
+              <line x1="14" y1="30" x2="34" y2="30"/>
+            </svg>
+          </div>
+          <h3>Summary Report</h3>
+          <p>Printable HTML report with drawings and quantities.</p>
+          <button class="btn btn-primary btn-export" id="btnExportReport">Generate Report</button>
+        </div>
+      </div>
+
+      <div class="section-nav-buttons">
+        <button class="btn btn-ghost btn-prev" data-go="preview">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          Back
+        </button>
+        <div></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Toast notification container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Scripts -->
+  <script src="js/terrain.js"></script>
+  <script src="js/nails.js"></script>
+  <script src="js/preview.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

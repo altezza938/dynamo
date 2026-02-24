@@ -1,10 +1,58 @@
 /* ============================================
-   Soil Nail Calculation Module v2.0
-   Nail placement, quantities, and diagram.
+   Soil Nail Calculation Module v3.0
+   Nail placement, quantities, diagram, and
+   GEO prescriptive design per GEOguide 7 and
+   GEO Publication No. 1/2009.
    ============================================ */
 
 const NailsModule = (() => {
   let diagramCanvas, diagramCtx;
+
+  // ---- GEO Prescriptive Design Tables ----
+  // Based on GEOguide 7 (2008), GEO Publication No. 1/2009,
+  // and GEO Report No. 175 (Soil Nail Head Review)
+  const GEO_PRESCRIPTIVE = {
+    // Prescriptive nail design for soil cut slopes
+    // Slope height ranges -> recommended parameters
+    heightRanges: [
+      { maxH: 3,  minRows: 2, barDia: 25, nailLength: 3,  drillDia: 100, plateSize: 200, plateThk: 15 },
+      { maxH: 5,  minRows: 3, barDia: 25, nailLength: 4,  drillDia: 100, plateSize: 200, plateThk: 15 },
+      { maxH: 7,  minRows: 4, barDia: 25, nailLength: 6,  drillDia: 100, plateSize: 200, plateThk: 20 },
+      { maxH: 10, minRows: 5, barDia: 32, nailLength: 8,  drillDia: 115, plateSize: 250, plateThk: 20 },
+      { maxH: 15, minRows: 7, barDia: 32, nailLength: 12, drillDia: 115, plateSize: 300, plateThk: 20 },
+      { maxH: 20, minRows: 9, barDia: 40, nailLength: 16, drillDia: 150, plateSize: 300, plateThk: 25 }
+    ],
+    // Standard parameters (GEOguide 7 recommended)
+    defaults: {
+      inclination: 15,        // 10-20° below horizontal, 15° standard
+      hSpacing: 1.5,          // 1.0-2.0m, 1.5m standard
+      vSpacing: 1.5,          // 1.0-2.0m, 1.5m standard
+      topOffset: 0.5,         // 0.5-1.0m from crest
+      bottomOffset: 0.5,      // 0.3-0.5m from toe
+      steelGrade: 500,        // Grade 500 high yield deformed bar
+      groutStrength: 30,      // ≥20 MPa, typically 25-30 MPa
+      centralizerSpacing: 1.0, // 1.0-2.0m
+      corrosionProtection: 'class2', // Class II for permanent works
+      facingType: 'shotcrete',       // Hard or soft facing
+      patternType: 'staggered'       // Staggered preferred per GEO
+    },
+    // Prescriptive design limits
+    limits: {
+      maxSlopeHeight: 20,     // m, beyond this requires full analysis
+      maxSlopeAngle: 70,      // degrees, prescriptive limit
+      prescriptiveAngle: 55,  // degrees, standard prescriptive angle
+      minNailLength: 3,       // m
+      maxNailLength: 20,      // m
+      minSpacing: 1.0,        // m
+      maxSpacing: 2.0,        // m
+      minInclination: 5,      // degrees
+      maxInclination: 25,     // degrees (>20° not recommended)
+      minDrillHole: 75,       // mm
+      maxDrillHole: 200,      // mm
+      minBarDia: 20,          // mm
+      maxBarDia: 40           // mm
+    }
+  };
 
   function init() {
     diagramCanvas = document.getElementById('nailDiagramCanvas');
@@ -20,8 +68,174 @@ const NailsModule = (() => {
         if (el) el.addEventListener('input', drawDiagram);
       });
 
+      // Auto-design button
+      const btnAutoDesign = document.getElementById('btnAutoDesign');
+      if (btnAutoDesign) {
+        btnAutoDesign.addEventListener('click', applyPrescriptiveDesign);
+      }
+
       window.addEventListener('resize', resizeDiagram);
       setTimeout(drawDiagram, 200);
+    }
+  }
+
+  // ---- GEO Prescriptive Design Functions ----
+
+  function getPrescriptiveParams(slopeHeight) {
+    const ranges = GEO_PRESCRIPTIVE.heightRanges;
+    let match = ranges[ranges.length - 1]; // default to largest
+    for (const range of ranges) {
+      if (slopeHeight <= range.maxH) {
+        match = range;
+        break;
+      }
+    }
+    return {
+      ...GEO_PRESCRIPTIVE.defaults,
+      nailLength: match.nailLength,
+      barDiameter: match.barDia,
+      drillDiameter: match.drillDia,
+      plateSize: match.plateSize,
+      plateThickness: match.plateThk,
+      minRows: match.minRows
+    };
+  }
+
+  function applyPrescriptiveDesign() {
+    const terrainPoints = TerrainModule.getPoints();
+    if (terrainPoints.length < 2) {
+      if (typeof App !== 'undefined') App.showToast('Define terrain profile first to use auto-design.', 'warning');
+      return;
+    }
+
+    const ys = terrainPoints.map(p => p.y);
+    const slopeHeight = Math.max(...ys) - Math.min(...ys);
+
+    if (slopeHeight < 0.5) {
+      if (typeof App !== 'undefined') App.showToast('Terrain is too flat for soil nail design.', 'warning');
+      return;
+    }
+
+    // Calculate slope angle from terrain
+    const sorted = [...terrainPoints].sort((a, b) => a.x - b.x);
+    const slopeSegments = TerrainModule.getSlopeSegments();
+    let maxSegAngle = 0;
+    slopeSegments.forEach(seg => {
+      const absAngle = Math.abs(seg.angle);
+      if (absAngle > maxSegAngle) maxSegAngle = absAngle;
+    });
+
+    const prescriptive = getPrescriptiveParams(slopeHeight);
+
+    // Adjust nail length for steep slopes (>55°): increase by ~20%
+    let adjustedLength = prescriptive.nailLength;
+    if (maxSegAngle > 55) {
+      adjustedLength = Math.ceil(prescriptive.nailLength * 1.2);
+    }
+
+    // Apply to form fields
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) { el.value = val; el.dispatchEvent(new Event('input')); }
+    };
+
+    setVal('nailLength', adjustedLength);
+    setVal('nailInclination', prescriptive.inclination);
+    setVal('barDiameter', prescriptive.barDiameter);
+    setVal('drillDiameter', prescriptive.drillDiameter);
+    setVal('hSpacing', prescriptive.hSpacing);
+    setVal('vSpacing', prescriptive.vSpacing);
+    setVal('topOffset', prescriptive.topOffset);
+    setVal('bottomOffset', prescriptive.bottomOffset);
+    setVal('plateSize', prescriptive.plateSize);
+    setVal('plateThickness', prescriptive.plateThickness);
+    setVal('steelGrade', prescriptive.steelGrade);
+    setVal('groutStrength', prescriptive.groutStrength);
+    setVal('patternType', prescriptive.patternType);
+    setVal('centralizerSpacing', prescriptive.centralizerSpacing);
+    setVal('corrosionProtection', prescriptive.corrosionProtection);
+
+    // Enable centralizers
+    const centralEl = document.getElementById('centralizers');
+    if (centralEl && !centralEl.checked) centralEl.click();
+
+    // Show info
+    const warnings = [];
+    if (slopeHeight > GEO_PRESCRIPTIVE.limits.maxSlopeHeight) {
+      warnings.push(`Slope height ${slopeHeight.toFixed(1)}m exceeds prescriptive limit of ${GEO_PRESCRIPTIVE.limits.maxSlopeHeight}m. Full geotechnical analysis required.`);
+    }
+    if (maxSegAngle > GEO_PRESCRIPTIVE.limits.maxSlopeAngle) {
+      warnings.push(`Max slope angle ${maxSegAngle.toFixed(0)}° exceeds ${GEO_PRESCRIPTIVE.limits.maxSlopeAngle}° limit.`);
+    }
+
+    updateValidationDisplay(warnings);
+
+    const msg = `GEO prescriptive design applied: H=${slopeHeight.toFixed(1)}m → L=${adjustedLength}m, T${prescriptive.barDiameter}, Ø${prescriptive.drillDiameter}mm drill`;
+    if (typeof App !== 'undefined') App.showToast(msg, 'success');
+
+    drawDiagram();
+  }
+
+  function validateDesign(params, slopeHeight) {
+    const limits = GEO_PRESCRIPTIVE.limits;
+    const warnings = [];
+
+    // Check nail length vs slope height ratio
+    const lhRatio = params.nailLength / slopeHeight;
+    if (lhRatio < 0.6) {
+      warnings.push(`Nail length/slope height ratio (${lhRatio.toFixed(2)}) is below recommended minimum of 0.6. Consider longer nails per GEOguide 7.`);
+    }
+    if (lhRatio > 1.5) {
+      warnings.push(`Nail length/slope height ratio (${lhRatio.toFixed(2)}) exceeds typical range. Nails may be unnecessarily long.`);
+    }
+
+    // Spacing checks
+    if (params.hSpacing < limits.minSpacing || params.hSpacing > limits.maxSpacing) {
+      warnings.push(`Horizontal spacing ${params.hSpacing}m is outside recommended range (${limits.minSpacing}-${limits.maxSpacing}m) per GEOguide 7.`);
+    }
+    if (params.vSpacing < limits.minSpacing || params.vSpacing > limits.maxSpacing) {
+      warnings.push(`Vertical spacing ${params.vSpacing}m is outside recommended range (${limits.minSpacing}-${limits.maxSpacing}m) per GEOguide 7.`);
+    }
+
+    // Inclination check
+    if (params.inclination < limits.minInclination) {
+      warnings.push(`Inclination ${params.inclination}° is below recommended minimum of ${limits.minInclination}°.`);
+    }
+    if (params.inclination > 20) {
+      warnings.push(`Inclination ${params.inclination}° exceeds recommended 20° per GEOguide 7 Cl. 3.4.`);
+    }
+
+    // Drill hole vs bar diameter
+    const drillBarRatio = params.drillDiameter / params.barDiameter;
+    if (drillBarRatio < 2.5) {
+      warnings.push(`Drill hole/bar diameter ratio (${drillBarRatio.toFixed(1)}) is low. Minimum annulus required for proper grout encapsulation per GEOguide 7.`);
+    }
+
+    // Grout strength
+    if (params.groutStrength < 20) {
+      warnings.push(`Grout strength ${params.groutStrength} MPa is below minimum 20 MPa per GEOguide 7 Cl. 4.3.`);
+    }
+
+    // Slope height check
+    if (slopeHeight > limits.maxSlopeHeight) {
+      warnings.push(`Slope height ${slopeHeight.toFixed(1)}m exceeds prescriptive design limit of ${limits.maxSlopeHeight}m. Full geotechnical analysis is required.`);
+    }
+
+    return warnings;
+  }
+
+  function updateValidationDisplay(warnings) {
+    const container = document.getElementById('geoValidationWarnings');
+    if (!container) return;
+
+    if (warnings.length === 0) {
+      container.innerHTML = '<div class="geo-validation-ok">Design parameters are within GEO recommended ranges.</div>';
+      container.classList.remove('has-warnings');
+    } else {
+      container.innerHTML = warnings.map(w =>
+        `<div class="geo-validation-warning"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>${w}</div>`
+      ).join('');
+      container.classList.add('has-warnings');
     }
   }
 
@@ -173,11 +387,17 @@ const NailsModule = (() => {
       }
     });
 
+    // Validate design against GEO guidelines
+    const designWarnings = validateDesign(params, slopeHeight);
+    updateValidationDisplay(designWarnings);
+
     return {
       nails: nails3D,
       rows: rows,
       nailsPerRow: nailsPerRow,
       params: params,
+      slopeHeight: slopeHeight,
+      warnings: designWarnings,
       error: null
     };
   }
@@ -365,5 +585,5 @@ const NailsModule = (() => {
     });
   }
 
-  return { init, getParams, generateLayout, calculateQuantities, drawDiagram };
+  return { init, getParams, generateLayout, calculateQuantities, drawDiagram, applyPrescriptiveDesign, getPrescriptiveParams, validateDesign, GEO_PRESCRIPTIVE };
 })();

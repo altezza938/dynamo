@@ -598,36 +598,86 @@ const ExportModule = (() => {
     const info = getProjectInfo();
 
     let dxf = '';
+
+    // HEADER section
     dxf += '0\nSECTION\n2\nHEADER\n';
     dxf += '9\n$ACADVER\n1\nAC1015\n';
+    dxf += '9\n$INSBASE\n10\n0.0\n20\n0.0\n30\n0.0\n';
     dxf += '0\nENDSEC\n';
 
+    // TABLES section
     dxf += '0\nSECTION\n2\nTABLES\n';
-    dxf += '0\nTABLE\n2\nLAYER\n';
+
+    // Linetype table
+    dxf += '0\nTABLE\n2\nLTYPE\n70\n1\n';
+    dxf += '0\nLTYPE\n2\nCONTINUOUS\n70\n0\n3\nSolid line\n72\n65\n73\n0\n40\n0.0\n';
+    dxf += '0\nENDTAB\n';
+
+    // Layer table
+    dxf += '0\nTABLE\n2\nLAYER\n70\n5\n';
+    dxf += '0\nLAYER\n2\nTERRAIN\n70\n0\n62\n30\n6\nCONTINUOUS\n';
     dxf += '0\nLAYER\n2\nSOIL_NAILS\n70\n0\n62\n5\n6\nCONTINUOUS\n';
     dxf += '0\nLAYER\n2\nNAIL_HEADS\n70\n0\n62\n1\n6\nCONTINUOUS\n';
     dxf += '0\nLAYER\n2\nDRILL_HOLES\n70\n0\n62\n8\n6\nCONTINUOUS\n';
-    dxf += '0\nLAYER\n2\nTERRAIN\n70\n0\n62\n40\n6\nCONTINUOUS\n';
+    dxf += '0\nLAYER\n2\nSOIL_NAILS_3D\n70\n0\n62\n150\n6\nCONTINUOUS\n';
     dxf += '0\nENDTAB\n';
+
     dxf += '0\nENDSEC\n';
 
+    // BLOCKS section (required by many DXF parsers)
+    dxf += '0\nSECTION\n2\nBLOCKS\n';
+    dxf += '0\nENDSEC\n';
+
+    // ENTITIES section
     dxf += '0\nSECTION\n2\nENTITIES\n';
 
+    // --- 2D Cross-Section (XY plane: X = distance, Y = elevation) ---
+
+    // Terrain profile lines
     const terrain = TerrainModule.getPoints();
     if (terrain.length >= 2) {
       terrain.forEach((pt, i) => {
         if (i < terrain.length - 1) {
           const x1 = (pt.x + info.baseEasting).toFixed(4);
-          const z1 = (pt.y + info.baseElevation).toFixed(4);
+          const y1 = (pt.y + info.baseElevation).toFixed(4);
           const x2 = (terrain[i + 1].x + info.baseEasting).toFixed(4);
-          const z2 = (terrain[i + 1].y + info.baseElevation).toFixed(4);
+          const y2 = (terrain[i + 1].y + info.baseElevation).toFixed(4);
           dxf += `0\nLINE\n8\nTERRAIN\n`;
-          dxf += `10\n${x1}\n20\n0.0000\n30\n${z1}\n`;
-          dxf += `11\n${x2}\n21\n0.0000\n31\n${z2}\n`;
+          dxf += `10\n${x1}\n20\n${y1}\n30\n0.0\n`;
+          dxf += `11\n${x2}\n21\n${y2}\n31\n0.0\n`;
         }
       });
     }
 
+    // Nail rows as 2D cross-section lines (one per row)
+    layout.rows.forEach(row => {
+      const sx = (row.start.x + info.baseEasting).toFixed(4);
+      const sy = (row.start.y + info.baseElevation).toFixed(4);
+      const ex = (row.end.x + info.baseEasting).toFixed(4);
+      const ey = (row.end.y + info.baseElevation).toFixed(4);
+
+      // Drill hole (wider line via LWPOLYLINE or just use LINE)
+      dxf += `0\nLINE\n8\nDRILL_HOLES\n`;
+      dxf += `10\n${sx}\n20\n${sy}\n30\n0.0\n`;
+      dxf += `11\n${ex}\n21\n${ey}\n31\n0.0\n`;
+
+      // Nail bar
+      dxf += `0\nLINE\n8\nSOIL_NAILS\n`;
+      dxf += `10\n${sx}\n20\n${sy}\n30\n0.0\n`;
+      dxf += `11\n${ex}\n21\n${ey}\n31\n0.0\n`;
+
+      // Nail head point
+      dxf += `0\nPOINT\n8\nNAIL_HEADS\n`;
+      dxf += `10\n${sx}\n20\n${sy}\n30\n0.0\n`;
+
+      // Row label as TEXT
+      dxf += `0\nTEXT\n8\nSOIL_NAILS\n`;
+      dxf += `10\n${sx}\n20\n${sy}\n30\n0.0\n`;
+      dxf += `40\n0.3\n`;
+      dxf += `1\nR${row.rowNumber} L=${row.nailLength}m\n`;
+    });
+
+    // --- 3D Nails (full layout with lateral positions) ---
     layout.nails.forEach(nail => {
       const hx = (nail.headX + info.baseEasting).toFixed(4);
       const hy = (nail.headZ + info.baseNorthing).toFixed(4);
@@ -636,12 +686,9 @@ const ExportModule = (() => {
       const ty = (nail.tipZ + info.baseNorthing).toFixed(4);
       const tz = (nail.tipY + info.baseElevation).toFixed(4);
 
-      dxf += `0\nLINE\n8\nSOIL_NAILS\n`;
+      dxf += `0\nLINE\n8\nSOIL_NAILS_3D\n`;
       dxf += `10\n${hx}\n20\n${hy}\n30\n${hz}\n`;
       dxf += `11\n${tx}\n21\n${ty}\n31\n${tz}\n`;
-
-      dxf += `0\nPOINT\n8\nNAIL_HEADS\n`;
-      dxf += `10\n${hx}\n20\n${hy}\n30\n${hz}\n`;
     });
 
     dxf += '0\nENDSEC\n';
@@ -649,7 +696,7 @@ const ExportModule = (() => {
 
     const filename = `${sanitizeFilename(info.name)}_SoilNails.dxf`;
     downloadFile(dxf, filename, 'application/dxf');
-    App.showToast(`Downloaded ${filename}`, 'success');
+    App.showToast(`Downloaded ${filename} (${layout.rows.length} rows + ${layout.nails.length} 3D nails)`, 'success');
   }
 
   // ============================================

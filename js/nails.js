@@ -107,6 +107,14 @@ const NailsModule = (() => {
       return { nails: [], rows: [], error: 'Top/bottom offsets are too large for this slope height.' };
     }
 
+    // Determine which direction is "into the ground"
+    // If the highest terrain point has greater X than the lowest, the slope
+    // goes up-right and nails must go in the +X direction (into the hillside)
+    const sortedByElev = [...terrainPoints].sort((a, b) => a.y - b.y);
+    const lowestPt = sortedByElev[0];
+    const highestPt = sortedByElev[sortedByElev.length - 1];
+    const groundDirX = (highestPt.x >= lowestPt.x) ? 1 : -1;
+
     const rows = [];
     let elevation = firstRowElev;
     let rowNum = 1;
@@ -118,7 +126,7 @@ const NailsModule = (() => {
 
         const nailStartX = faceX;
         const nailStartY = elevation;
-        const nailEndX = nailStartX - params.nailLength * Math.cos(inclRad);
+        const nailEndX = nailStartX + groundDirX * params.nailLength * Math.cos(inclRad);
         const nailEndY = nailStartY - params.nailLength * Math.sin(inclRad);
 
         rows.push({
